@@ -15,6 +15,9 @@ export default function AccountTransactionsList({
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [editingType, setEditingType] = useState(null);
 
+  const getCreatedStamp = (t) => t?.created_at ?? t?.created_date ?? t?.date;
+  const getUpdatedStamp = (t) => t?.updated_at ?? t?.updated_date ?? getCreatedStamp(t);
+
   // Group by month
   const groupedByMonth = {};
   transactions.forEach(t => {
@@ -31,11 +34,11 @@ export default function AccountTransactionsList({
   const allTransactionsSorted = [...transactions].sort((a, b) => {
     const dateCompare = new Date(a.date) - new Date(b.date);
     if (dateCompare !== 0) return dateCompare;
-    // If same date, use created_date as primary tiebreaker
-    const createdCompare = new Date(a.created_date) - new Date(b.created_date);
+    // If same date, use created_at as primary tiebreaker
+    const createdCompare = new Date(getCreatedStamp(a)) - new Date(getCreatedStamp(b));
     if (createdCompare !== 0) return createdCompare;
-    // If same created_date, use updated_date as secondary tiebreaker
-    return new Date(a.updated_date) - new Date(b.updated_date);
+    // If same created_at, use updated_at as secondary tiebreaker
+    return new Date(getUpdatedStamp(a)) - new Date(getUpdatedStamp(b));
   });
 
   // Calculate running balance map (from oldest to newest)
@@ -74,10 +77,10 @@ export default function AccountTransactionsList({
               .sort((a, b) => {
                 const dateCompare = new Date(b.date) - new Date(a.date);
                 if (dateCompare !== 0) return dateCompare;
-                // For same date, use created_date then updated_date (most recent first in display)
-                const createdCompare = new Date(b.created_date) - new Date(a.created_date);
+                // For same date, use created_at then updated_at (most recent first in display)
+                const createdCompare = new Date(getCreatedStamp(b)) - new Date(getCreatedStamp(a));
                 if (createdCompare !== 0) return createdCompare;
-                return new Date(b.updated_date) - new Date(a.updated_date);
+                return new Date(getUpdatedStamp(b)) - new Date(getUpdatedStamp(a));
               })
               .map((transaction, idx) => {
                 const transactionBalance = runningBalanceMap[transaction.id] || 0;
