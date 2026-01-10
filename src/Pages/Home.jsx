@@ -3,7 +3,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import { startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, subDays } from 'date-fns';
+import {
+  startOfDay,
+  endOfDay,
+  startOfMonth,
+  endOfMonth,
+  startOfYear,
+  endOfYear,
+  subDays,
+  subMonths,
+  subYears,
+} from 'date-fns';
 import NetWorthCard from '../Components/dashboard/NetWorthCard';
 import CategoryBreakdown from '../Components/dashboard/CategoryBreakdown';
 import RecentTransactions from '../Components/dashboard/RecentTransactions';
@@ -74,85 +84,112 @@ export default function Home() {
     queryClient.invalidateQueries({ queryKey: ['transfers'] });
   };
 
-  const filterByPeriod = (items) => {
+  const getPeriods = () => {
     const now = new Date();
-    let startDate, endDate;
+    let reportStart;
+    let reportEnd = endOfDay(now);
+    let compareStart;
+    let compareEnd;
 
     if (selectedPeriod === 'last30') {
-      // Days 1-30 back
-      startDate = subDays(now, 30);
-      endDate = now;
+      reportStart = startOfDay(subDays(now, 30));
+      compareStart = startOfDay(subDays(now, 60));
+      compareEnd = endOfDay(subDays(now, 31));
+    } else if (selectedPeriod === 'last90') {
+      reportStart = startOfDay(subDays(now, 90));
+      compareStart = startOfDay(subDays(now, 180));
+      compareEnd = endOfDay(subDays(now, 91));
     } else if (selectedPeriod === 'thisMonth') {
-      // Month to date
-      startDate = startOfMonth(now);
-      endDate = now;
-    } else if (selectedPeriod === 'lastMonth') {
-      // Full previous month
+      reportStart = startOfMonth(now);
+      reportEnd = endOfMonth(now);
       const lastMonth = subMonths(now, 1);
-      startDate = startOfMonth(lastMonth);
-      endDate = endOfMonth(lastMonth);
+      compareStart = startOfMonth(lastMonth);
+      compareEnd = endOfMonth(lastMonth);
     } else if (selectedPeriod === 'thisYear') {
-      // Year to date
-      startDate = startOfYear(now);
-      endDate = now;
+      reportStart = startOfYear(now);
+      reportEnd = endOfYear(now);
+      const lastYear = subYears(now, 1);
+      compareStart = startOfYear(lastYear);
+      compareEnd = endOfYear(lastYear);
     }
 
+    return { reportStart, reportEnd, compareStart, compareEnd };
+  };
+
+  const filterByRange = (items, startDate, endDate) => {
     return items.filter(item => {
       const itemDate = new Date(item.date);
       return itemDate >= startDate && itemDate <= endDate;
     });
   };
 
-  const filteredIncome = filterByPeriod(income);
-  const filteredExpenses = filterByPeriod(expenses);
+  const { reportStart, reportEnd, compareStart, compareEnd } = getPeriods();
+
+  const filteredIncome = filterByRange(income, reportStart, reportEnd);
+  const filteredExpenses = filterByRange(expenses, reportStart, reportEnd);
+  const comparisonIncome = filterByRange(income, compareStart, compareEnd);
+  const comparisonExpenses = filterByRange(expenses, compareStart, compareEnd);
 
   const totalIncome = filteredIncome.reduce((sum, item) => sum + (item.amount || 0), 0);
   const totalExpenses = filteredExpenses.reduce((sum, item) => sum + (item.amount || 0), 0);
+  const comparisonIncomeTotal = comparisonIncome.reduce((sum, item) => sum + (item.amount || 0), 0);
+  const comparisonExpensesTotal = comparisonExpenses.reduce((sum, item) => sum + (item.amount || 0), 0);
 
-  const calculateNetWorthAtDate = (endDate) => {
-    return accounts.reduce((sum, account) => {
-      const accountIncome = income
-        .filter(i => i.account_id === account.id && new Date(i.date) <= endDate && !i.projected)
-        .reduce((s, i) => s + i.amount, 0);
-      const accountExpenses = expenses
-        .filter(e => e.account_id === account.id && new Date(e.date) <= endDate && !e.projected)
-        .reduce((s, e) => s + e.amount, 0);
-      const transfersOut = transfers
-        .filter(t => t.from_account_id === account.id && new Date(t.date) <= endDate)
-        .reduce((s, t) => s + t.amount, 0);
-      const transfersIn = transfers
-        .filter(t => t.to_account_id === account.id && new Date(t.date) <= endDate)
-        .reduce((s, t) => s + t.amount, 0);
-      return sum + account.starting_balance + accountIncome - accountExpenses - transfersOut + transfersIn;
+  const incomeDelta = totalIncome - comparisonIncomeTotal;
+  const expenseDelta = totalExpenses - comparisonExpensesTotal;
+  const incomeDeltaPercent =
+    comparisonIncomeTotal === 0
+      ? (incomeDelta === 0 ? 0 : (incomeDelta > 0 ? Infinity : -Infinity))
+      : (incomeDelta / Math.abs(comparisonIncomeTotal)) * 100;
+  const expenseDeltaPercent =
+    comparisonExpensesTotal === 0
+      ? (expenseDelta === 0 ? 0 : (expenseDelta > 0 ? Infinity : -Infinity))
+      : (expenseDelta / Math.abs(comparisonExpensesTotal)) * 100;
+
+  const sumUntilDate = (items, endDate, inclusive = true) => {
+    return items.reduce((sum, item) => {
+      const itemDate = new Date(item.date);
+      const isInRange = inclusive ? itemDate <= endDate : itemDate < endDate;
+      if (!isInRange) return sum;
+      return sum + (item.amount || 0);
     }, 0);
   };
 
-  const currentNetWorth = calculateNetWorthAtDate(new Date());
+  const today = new Date();
+  const netWorthEndDate =
+    selectedPeriod === 'thisMonth'
+      ? endOfMonth(today)
+      : selectedPeriod === 'thisYear'
+        ? endOfYear(today)
+        : endOfDay(today);
+  const currentNetWorth = sumUntilDate(income, netWorthEndDate, true) - sumUntilDate(expenses, netWorthEndDate, true);
 
   const getPreviousNetWorth = () => {
-    const now = new Date();
     let compareDate;
+    let inclusive = true;
 
     if (selectedPeriod === 'last30') {
-      compareDate = subDays(now, 30);
+      compareDate = subDays(today, 30);
+    } else if (selectedPeriod === 'last90') {
+      compareDate = subDays(today, 90);
     } else if (selectedPeriod === 'thisMonth') {
-      const lastMonth = subMonths(now, 1);
-      compareDate = new Date(lastMonth.getFullYear(), lastMonth.getMonth(), now.getDate());
-      if (compareDate > endOfMonth(lastMonth)) {
-        compareDate = endOfMonth(lastMonth);
-      }
-    } else if (selectedPeriod === 'lastMonth') {
-      const twoMonthsAgo = subMonths(now, 2);
-      compareDate = endOfMonth(twoMonthsAgo);
+      compareDate = startOfMonth(today);
+      inclusive = false;
     } else if (selectedPeriod === 'thisYear') {
-      const lastYear = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
-      compareDate = lastYear;
+      compareDate = startOfYear(today);
+      inclusive = false;
     }
 
-    return calculateNetWorthAtDate(compareDate);
+    return sumUntilDate(income, compareDate, inclusive) - sumUntilDate(expenses, compareDate, inclusive);
   };
 
   const previousNetWorth = getPreviousNetWorth();
+  const netWorthDelta = currentNetWorth - previousNetWorth;
+  const percentBase = Math.abs(previousNetWorth);
+  const netWorthDeltaPercent =
+    percentBase === 0
+      ? (netWorthDelta === 0 ? 0 : (netWorthDelta > 0 ? Infinity : -Infinity))
+      : (netWorthDelta / percentBase) * 100;
 
   const accountBalances = {};
   accounts.forEach(account => {
@@ -225,6 +262,12 @@ export default function Home() {
             totalExpenses={totalExpenses}
             currentNetWorth={currentNetWorth}
             previousNetWorth={previousNetWorth}
+            netWorthDelta={netWorthDelta}
+            netWorthDeltaPercent={netWorthDeltaPercent}
+            incomeDelta={incomeDelta}
+            incomeDeltaPercent={incomeDeltaPercent}
+            expenseDelta={expenseDelta}
+            expenseDeltaPercent={expenseDeltaPercent}
             period={selectedPeriod}
             onPeriodChange={setSelectedPeriod}
           />
