@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { format, parseISO, startOfMonth } from 'date-fns';
-import { ArrowUpRight, ArrowDownRight, ArrowLeftRight, Edit, Trash2 } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, ArrowLeftRight, Edit, Trash2, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import EditTransactionModal from '../transactions/EditTransactionModal';
 import EditTransferModal from '../transactions/EditTransferModal';
+import DuplicateTransactionModal from '../transactions/DuplicateTransactionModal';
 
 export default function AccountTransactionsList({ 
   selectedAccount, 
@@ -14,6 +15,8 @@ export default function AccountTransactionsList({
 }) {
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [editingType, setEditingType] = useState(null);
+  const [duplicatingTransaction, setDuplicatingTransaction] = useState(null);
+  const [duplicatingType, setDuplicatingType] = useState(null);
 
   const getCreatedStamp = (t) => t?.created_at ?? t?.created_date ?? t?.date;
   const getUpdatedStamp = (t) => t?.updated_at ?? t?.updated_date ?? getCreatedStamp(t);
@@ -63,6 +66,11 @@ export default function AccountTransactionsList({
   const handleEdit = (transaction, type) => {
     setEditingTransaction(transaction);
     setEditingType(type);
+  };
+
+  const handleDuplicate = (transaction, type) => {
+    setDuplicatingTransaction(transaction);
+    setDuplicatingType(type);
   };
 
   return (
@@ -156,6 +164,14 @@ export default function AccountTransactionsList({
                         <Button
                           variant="ghost"
                           size="icon"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-slate-400 hover:text-slate-900"
+                          onClick={() => handleDuplicate(transaction, transaction.type)}
+                        >
+                          <Copy className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-slate-400 hover:text-red-500"
                           onClick={() => onDelete(transaction.id, transaction.type)}
                         >
@@ -186,6 +202,21 @@ export default function AccountTransactionsList({
           open={!!editingTransaction}
           onOpenChange={(open) => !open && setEditingTransaction(null)}
           transfer={editingTransaction}
+          onSuccess={onUpdate}
+        />
+      )}
+
+      {duplicatingTransaction && duplicatingType && (
+        <DuplicateTransactionModal
+          open={!!duplicatingTransaction}
+          onOpenChange={(open) => {
+            if (!open) {
+              setDuplicatingTransaction(null);
+              setDuplicatingType(null);
+            }
+          }}
+          transaction={duplicatingTransaction}
+          type={duplicatingType}
           onSuccess={onUpdate}
         />
       )}

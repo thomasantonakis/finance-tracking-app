@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { format, isSameDay } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowUpRight, ArrowDownRight, ArrowLeftRight, Trash2, Edit } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, ArrowLeftRight, Trash2, Edit, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import EditTransactionModal from '../transactions/EditTransactionModal';
 import EditTransferModal from '../transactions/EditTransferModal';
+import DuplicateTransactionModal from '../transactions/DuplicateTransactionModal';
 
 export default function DayTransactions({ 
   selectedDate, 
@@ -17,6 +18,8 @@ export default function DayTransactions({
 }) {
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [editingType, setEditingType] = useState(null);
+  const [duplicatingTransaction, setDuplicatingTransaction] = useState(null);
+  const [duplicatingType, setDuplicatingType] = useState(null);
 
   const getAccountName = (accountId) => {
     const account = accounts.find(a => a.id === accountId);
@@ -26,6 +29,11 @@ export default function DayTransactions({
   const handleEdit = (transaction, type) => {
     setEditingTransaction(transaction);
     setEditingType(type);
+  };
+
+  const handleDuplicate = (transaction, type) => {
+    setDuplicatingTransaction(transaction);
+    setDuplicatingType(type);
   };
 
   const dayExpenses = expenses.filter(e => isSameDay(new Date(e.date), selectedDate));
@@ -145,6 +153,14 @@ export default function DayTransactions({
                   <Button
                     variant="ghost"
                     size="icon"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-slate-400 hover:text-slate-900 hover:bg-slate-100"
+                    onClick={() => handleDuplicate(transaction, transaction.type)}
+                  >
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50"
                     onClick={() => onDelete(transaction.id, transaction.type)}
                   >
@@ -172,6 +188,21 @@ export default function DayTransactions({
           open={!!editingTransaction}
           onOpenChange={(open) => !open && setEditingTransaction(null)}
           transfer={editingTransaction}
+          onSuccess={onUpdate}
+        />
+      )}
+
+      {duplicatingTransaction && duplicatingType && (
+        <DuplicateTransactionModal
+          open={!!duplicatingTransaction}
+          onOpenChange={(open) => {
+            if (!open) {
+              setDuplicatingTransaction(null);
+              setDuplicatingType(null);
+            }
+          }}
+          transaction={duplicatingTransaction}
+          type={duplicatingType}
           onSuccess={onUpdate}
         />
       )}

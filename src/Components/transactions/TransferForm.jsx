@@ -16,15 +16,25 @@ import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight } from 'lucide-react';
 
-export default function TransferForm({ onSuccess, onCancel }) {
+export default function TransferForm({ onSuccess, onCancel, initialData, initialDate, onAfterCreate }) {
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    amount: '',
-    from_account_id: '',
-    to_account_id: '',
-    date: format(new Date(), 'yyyy-MM-dd'),
-    notes: ''
-  });
+  const [formData, setFormData] = useState(() => ({
+    amount: initialData?.amount?.toString() || '',
+    from_account_id: initialData?.from_account_id || '',
+    to_account_id: initialData?.to_account_id || '',
+    date: initialDate || format(new Date(), 'yyyy-MM-dd'),
+    notes: initialData?.notes || ''
+  }));
+
+  React.useEffect(() => {
+    setFormData({
+      amount: initialData?.amount?.toString() || '',
+      from_account_id: initialData?.from_account_id || '',
+      to_account_id: initialData?.to_account_id || '',
+      date: initialDate || format(new Date(), 'yyyy-MM-dd'),
+      notes: initialData?.notes || ''
+    });
+  }, [initialData, initialDate]);
 
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts'],
@@ -61,6 +71,7 @@ export default function TransferForm({ onSuccess, onCancel }) {
     
     toast.success('Transfer created successfully');
     setLoading(false);
+    onAfterCreate?.(formData.date);
     onSuccess();
   };
 

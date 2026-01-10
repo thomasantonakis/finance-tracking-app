@@ -30,19 +30,33 @@ const categoryLabels = {
   income: 'Income Category'
 };
 
-export default function TransactionForm({ type, onSuccess, onCancel }) {
+export default function TransactionForm({ type, onSuccess, onCancel, initialData, initialDate, onAfterCreate }) {
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    amount: '',
-    category: '',
-    subcategory: '',
-    account_id: '',
-    date: format(new Date(), 'yyyy-MM-dd'),
-    notes: '',
-    cleared: false,
-    projected: false,
+  const [formData, setFormData] = useState(() => ({
+    amount: initialData?.amount?.toString() || '',
+    category: initialData?.category || '',
+    subcategory: initialData?.subcategory || '',
+    account_id: initialData?.account_id || '',
+    date: initialDate || format(new Date(), 'yyyy-MM-dd'),
+    notes: initialData?.notes || '',
+    cleared: initialData?.cleared || false,
+    projected: initialData?.projected || false,
     newCategoryName: ''
-  });
+  }));
+
+  React.useEffect(() => {
+    setFormData({
+      amount: initialData?.amount?.toString() || '',
+      category: initialData?.category || '',
+      subcategory: initialData?.subcategory || '',
+      account_id: initialData?.account_id || '',
+      date: initialDate || format(new Date(), 'yyyy-MM-dd'),
+      notes: initialData?.notes || '',
+      cleared: initialData?.cleared || false,
+      projected: initialData?.projected || false,
+      newCategoryName: ''
+    });
+  }, [initialData, initialDate, type]);
 
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts'],
@@ -114,6 +128,7 @@ export default function TransactionForm({ type, onSuccess, onCancel }) {
     
     toast.success(`${type === 'income' ? 'Income' : 'Expense'} added successfully`);
     setLoading(false);
+    onAfterCreate?.(formData.date);
     onSuccess();
   };
 
