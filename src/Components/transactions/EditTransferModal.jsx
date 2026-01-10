@@ -64,6 +64,9 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
     onOpenChange(false);
   };
 
+  const createdStamp = transfer?.created_at ?? transfer?.created_date;
+  const updatedStamp = transfer?.updated_at ?? transfer?.updated_date ?? createdStamp;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
@@ -151,6 +154,17 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
               rows={2}
             />
           </div>
+
+          {createdStamp && (
+            <div className="pt-2 border-t border-slate-100">
+              <div className="flex flex-col gap-1 text-[10px] text-slate-400">
+                <div>Created: {new Date(createdStamp).toISOString().replace('T', ' ').slice(0, -1)} UTC</div>
+                {updatedStamp && (
+                  <div>Updated: {new Date(updatedStamp).toISOString().replace('T', ' ').slice(0, -1)} UTC</div>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-3 pt-2">
             <Button

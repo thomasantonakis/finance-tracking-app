@@ -107,6 +107,9 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
     onOpenChange(false);
   };
 
+  const createdStamp = transaction?.created_at ?? transaction?.created_date;
+  const updatedStamp = transaction?.updated_at ?? transaction?.updated_date ?? createdStamp;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
@@ -259,12 +262,12 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
             </div>
           </div>
 
-          {transaction?.created_date && (
+          {createdStamp && (
             <div className="pt-2 border-t border-slate-100">
               <div className="flex flex-col gap-1 text-[10px] text-slate-400">
-                <div>Created: {new Date(transaction.created_date).toISOString().replace('T', ' ').slice(0, -1)} UTC</div>
-                {transaction.updated_date && (
-                  <div>Updated: {new Date(transaction.updated_date).toISOString().replace('T', ' ').slice(0, -1)} UTC</div>
+                <div>Created: {new Date(createdStamp).toISOString().replace('T', ' ').slice(0, -1)} UTC</div>
+                {updatedStamp && (
+                  <div>Updated: {new Date(updatedStamp).toISOString().replace('T', ' ').slice(0, -1)} UTC</div>
                 )}
               </div>
             </div>
