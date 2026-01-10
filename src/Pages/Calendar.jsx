@@ -79,13 +79,11 @@ export default function Calendar() {
 
   const handleSelectDate = (date) => {
     setSelectedDate(date);
-    if (!weekView) {
-      setCollapsed(true);
-    }
   };
 
   const handleDoubleClick = (date) => {
     setSelectedDate(date);
+    setCurrentDate(date);
     setWeekView(true);
     setCollapsed(true);
   };
@@ -121,11 +119,8 @@ export default function Calendar() {
                 <ChevronLeft className="w-5 h-5" />
               </Button>
               <div>
-                {weekView && (
-                  <p className="text-xs text-slate-500 font-medium">Week {weekNumber}</p>
-                )}
                 <h1 className="text-2xl font-bold text-slate-900">
-                  {weekView ? `Week ${weekNumber}/${format(currentDate, 'yyyy')}` : format(currentDate, 'MMM yyyy')}
+                  {weekView ? `W${weekNumber}/${format(selectedDate, 'yyyy')}` : format(currentDate, 'MMM yyyy')}
                 </h1>
               </div>
               <Button
@@ -145,6 +140,7 @@ export default function Calendar() {
                 onClick={() => {
                   setCollapsed(false);
                   setWeekView(false);
+                  setCurrentDate(selectedDate);
                 }}
                 className="text-slate-600 hover:text-slate-900"
               >
