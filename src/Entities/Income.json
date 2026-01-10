@@ -1,0 +1,72 @@
+{
+  "name": "Income",
+  "type": "object",
+  "properties": {
+    "amount": {
+      "type": "number",
+      "description": "Amount received"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "salary",
+        "freelance",
+        "investment",
+        "business",
+        "gift",
+        "refund",
+        "rental",
+        "bonus",
+        "other"
+      ],
+      "description": "Income category"
+    },
+    "subcategory": {
+      "type": "string",
+      "description": "Subcategory for more detail"
+    },
+    "account_id": {
+      "type": "string",
+      "description": "Account this income belongs to"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of income"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    },
+    "cleared": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether transaction is cleared"
+    },
+    "projected": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether transaction is projected"
+    }
+  },
+  "required": [
+    "amount",
+    "category",
+    "account_id",
+    "date"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

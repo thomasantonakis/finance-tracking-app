@@ -1,0 +1,77 @@
+{
+  "name": "Expense",
+  "type": "object",
+  "properties": {
+    "amount": {
+      "type": "number",
+      "description": "Amount spent"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "food",
+        "transport",
+        "utilities",
+        "entertainment",
+        "shopping",
+        "health",
+        "education",
+        "travel",
+        "subscriptions",
+        "housing",
+        "other"
+      ],
+      "description": "Expense category"
+    },
+    "subcategory": {
+      "type": "string",
+      "description": "Subcategory for more detail"
+    },
+    "account_id": {
+      "type": "string",
+      "description": "Account this expense belongs to"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of expense"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    },
+    "cleared": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether transaction is cleared"
+    },
+    "projected": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether transaction is projected"
+    }
+  },
+  "required": [
+    "amount",
+    "category",
+    "account_id",
+    "date"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    },
+    "write": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

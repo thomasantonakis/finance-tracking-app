@@ -1,0 +1,47 @@
+{
+  "name": "Transfer",
+  "type": "object",
+  "properties": {
+    "amount": {
+      "type": "number",
+      "description": "Amount transferred"
+    },
+    "from_account_id": {
+      "type": "string",
+      "description": "Source account"
+    },
+    "to_account_id": {
+      "type": "string",
+      "description": "Destination account"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of transfer"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    }
+  },
+  "required": [
+    "amount",
+    "from_account_id",
+    "to_account_id",
+    "date"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

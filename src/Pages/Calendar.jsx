@@ -1,0 +1,185 @@
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { base44 } from '@/api/base44Client';
+import { motion } from 'framer-motion';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
+import { format, addMonths, subMonths, startOfWeek, addWeeks, subWeeks, getWeek } from 'date-fns';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
+import CalendarGrid from '../Components/calendar/CalendarGrid';
+import DayTransactions from '../Components/calendar/DayTransactions';
+import FloatingAddButton from '../Components/transactions/FloatingAddButton';
+
+export default function Calendar() {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [collapsed, setCollapsed] = useState(false);
+  const [weekView, setWeekView] = useState(false);
+  const queryClient = useQueryClient();
+
+  const { data: expenses = [] } = useQuery({
+    queryKey: ['expenses'],
+    queryFn: () => base44.entities.Expense.list('-date'),
+  });
+
+  const { data: income = [] } = useQuery({
+    queryKey: ['income'],
+    queryFn: () => base44.entities.Income.list('-date'),
+  });
+
+  const { data: transfers = [] } = useQuery({
+    queryKey: ['transfers'],
+    queryFn: () => base44.entities.Transfer.list('-date'),
+  });
+
+  const { data: accounts = [] } = useQuery({
+    queryKey: ['accounts'],
+    queryFn: () => base44.entities.Account.list(),
+  });
+
+  const deleteExpenseMutation = useMutation({
+    mutationFn: (id) => base44.entities.Expense.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      toast.success('Expense deleted');
+    },
+  });
+
+  const deleteIncomeMutation = useMutation({
+    mutationFn: (id) => base44.entities.Income.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['income'] });
+      toast.success('Income deleted');
+    },
+  });
+
+  const deleteTransferMutation = useMutation({
+    mutationFn: (id) => base44.entities.Transfer.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transfers'] });
+      toast.success('Transfer deleted');
+    },
+  });
+
+  const handleDelete = (id, type) => {
+    if (type === 'income') {
+      deleteIncomeMutation.mutate(id);
+    } else if (type === 'transfer') {
+      deleteTransferMutation.mutate(id);
+    } else {
+      deleteExpenseMutation.mutate(id);
+    }
+  };
+
+  const handleSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ['expenses'] });
+    queryClient.invalidateQueries({ queryKey: ['income'] });
+    queryClient.invalidateQueries({ queryKey: ['transfers'] });
+  };
+
+  const handleSelectDate = (date) => {
+    setSelectedDate(date);
+    if (!weekView) {
+      setCollapsed(true);
+    }
+  };
+
+  const handleDoubleClick = (date) => {
+    setSelectedDate(date);
+    setWeekView(true);
+    setCollapsed(true);
+  };
+
+  const navigatePeriod = (direction) => {
+    if (weekView) {
+      const newDate = direction > 0 ? addWeeks(selectedDate, 1) : subWeeks(selectedDate, 1);
+      setSelectedDate(newDate);
+      setCurrentDate(newDate);
+    } else {
+      setCurrentDate(direction > 0 ? addMonths(currentDate, 1) : subMonths(currentDate, 1));
+    }
+  };
+
+  const weekNumber = weekView ? getWeek(selectedDate, { weekStartsOn: 1 }) : null;
+
+  return (
+    <div className="min-h-screen bg-slate-50 pb-24">
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6"
+        >
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => navigatePeriod(-1)}
+                className="text-slate-600 hover:text-slate-900"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </Button>
+              <div>
+                {weekView && (
+                  <p className="text-xs text-slate-500 font-medium">Week {weekNumber}</p>
+                )}
+                <h1 className="text-2xl font-bold text-slate-900">
+                  {weekView ? `Week ${weekNumber}/${format(currentDate, 'yyyy')}` : format(currentDate, 'MMM yyyy')}
+                </h1>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => navigatePeriod(1)}
+                className="text-slate-600 hover:text-slate-900"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </Button>
+            </div>
+
+            {(collapsed || weekView) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setCollapsed(false);
+                  setWeekView(false);
+                }}
+                className="text-slate-600 hover:text-slate-900"
+              >
+                <CalendarIcon className="w-4 h-4 mr-2" />
+                Show Full Month
+              </Button>
+            )}
+          </div>
+
+          <CalendarGrid
+            currentDate={currentDate}
+            expenses={expenses}
+            income={income}
+            transfers={transfers}
+            selectedDate={selectedDate}
+            onSelectDate={handleSelectDate}
+            onDoubleClick={handleDoubleClick}
+            collapsed={collapsed || weekView}
+          />
+        </motion.div>
+
+        <div className="space-y-4">
+          <DayTransactions
+            selectedDate={selectedDate}
+            expenses={expenses}
+            income={income}
+            transfers={transfers}
+            accounts={accounts}
+            onDelete={handleDelete}
+            onUpdate={handleSuccess}
+          />
+
+          <FloatingAddButton onSuccess={handleSuccess} />
+        </div>
+      </div>
+    </div>
+  );
+}
