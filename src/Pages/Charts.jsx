@@ -361,7 +361,6 @@ export default function Charts() {
                       data={incomePieData}
                       cx="50%"
                       cy="50%"
-                      cy="50%"
                       innerRadius={60}
                       outerRadius={90}
                       fill="#8884d8"
