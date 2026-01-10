@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 export default function AccountsList({ accounts, editMode, onReorder, onEdit, onSelect, getAccountBalance }) {
   const handleDragEnd = (result) => {
     if (!result.destination) return;
+    if (result.destination.index === result.source.index) return;
     onReorder(result.source.index, result.destination.index);
   };
 
@@ -22,12 +23,10 @@ export default function AccountsList({ accounts, editMode, onReorder, onEdit, on
                 return (
                   <Draggable key={account.id} draggableId={account.id} index={index}>
                     {(provided, snapshot) => (
-                      <motion.div
+                      <div
                         ref={provided.innerRef}
                         {...provided.draggableProps}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.05 }}
+                        style={provided.draggableProps.style}
                         className={`bg-white rounded-2xl p-4 border border-slate-100 ${
                           snapshot.isDragging ? 'shadow-lg' : ''
                         }`}
@@ -58,7 +57,7 @@ export default function AccountsList({ accounts, editMode, onReorder, onEdit, on
                             Edit
                           </Button>
                         </div>
-                      </motion.div>
+                      </div>
                     )}
                   </Draggable>
                 );
