@@ -211,7 +211,7 @@ export default function Charts() {
               </div>
 
               <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-                <SelectTrigger className="w-40">
+                <SelectTrigger className="w-44">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -227,7 +227,7 @@ export default function Charts() {
 
             <div className="flex gap-4 mb-6">
               <Select value={viewMode} onValueChange={setViewMode}>
-                <SelectTrigger className="w-40">
+                <SelectTrigger className="w-44">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -259,7 +259,7 @@ export default function Charts() {
             </div>
 
             <Tabs value={chartType} onValueChange={setChartType} className="w-full">
-              <TabsList className="grid w-full grid-cols-3 mb-6">
+              <TabsList className="grid w-full grid-cols-3 gap-1 mb-6">
                 <TabsTrigger value="networth">Net Worth</TabsTrigger>
                 <TabsTrigger value="expense">Expense</TabsTrigger>
                 <TabsTrigger value="income">Income</TabsTrigger>

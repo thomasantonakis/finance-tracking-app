@@ -104,8 +104,9 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
           value={formData.from_account_id}
           onValueChange={(value) => setFormData({ ...formData, from_account_id: value })}
           required
+          className="w-full"
         >
-          <SelectTrigger>
+          <SelectTrigger className="w-full">
             <SelectValue placeholder="Select source account" />
           </SelectTrigger>
           <SelectContent>
@@ -136,8 +137,9 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
           value={formData.to_account_id}
           onValueChange={(value) => setFormData({ ...formData, to_account_id: value })}
           required
+          className="w-full"
         >
-          <SelectTrigger>
+          <SelectTrigger className="w-full">
             <SelectValue placeholder="Select destination account" />
           </SelectTrigger>
           <SelectContent>

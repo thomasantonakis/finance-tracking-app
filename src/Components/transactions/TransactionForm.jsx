@@ -175,8 +175,9 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
             value={formData.category}
             onValueChange={(value) => setFormData({ ...formData, category: value })}
             required
+            className="w-full"
           >
-            <SelectTrigger>
+            <SelectTrigger className="w-full">
               <SelectValue placeholder={`Select ${type} category`} />
             </SelectTrigger>
             <SelectContent>
@@ -219,8 +220,9 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
           value={formData.account_id}
           onValueChange={(value) => setFormData({ ...formData, account_id: value })}
           required
+          className="w-full"
         >
-          <SelectTrigger>
+          <SelectTrigger className="w-full">
             <SelectValue placeholder="Select account" />
           </SelectTrigger>
           <SelectContent>

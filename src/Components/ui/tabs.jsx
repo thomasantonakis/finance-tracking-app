@@ -19,7 +19,11 @@ export function Tabs({ value, defaultValue, onValueChange, children, className =
 }
 
 export function TabsList({ children, className = "" }) {
-  return <div className={`inline-flex gap-2 ${className}`}>{children}</div>;
+  return (
+    <div className={`rounded-lg bg-slate-100 p-1 ${className}`}>
+      {children}
+    </div>
+  );
 }
 
 export function TabsTrigger({ value, children, className = "" }) {
@@ -29,7 +33,9 @@ export function TabsTrigger({ value, children, className = "" }) {
     <button
       type="button"
       onClick={() => ctx?.setValue(value)}
-      className={`rounded-md px-3 py-2 text-sm border ${active ? "bg-slate-100" : "bg-white"} ${className}`}
+      className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+        active ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"
+      } ${className}`}
     >
       {children}
     </button>

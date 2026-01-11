@@ -101,8 +101,9 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
           value={formData.category}
           onValueChange={(value) => setFormData({ ...formData, category: value })}
           required
+          className="w-full"
         >
-          <SelectTrigger>
+          <SelectTrigger className="w-full">
             <SelectValue placeholder="Select category" />
           </SelectTrigger>
           <SelectContent>

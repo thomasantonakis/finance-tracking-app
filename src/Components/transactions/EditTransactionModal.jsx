@@ -159,10 +159,11 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
                 value={formData.category}
                 onValueChange={(value) => setFormData({ ...formData, category: value })}
                 required
+                className="w-full"
               >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder={`Select ${type} category`} />
+            </SelectTrigger>
                 <SelectContent>
                   {categories.map((cat) => (
                     <SelectItem key={cat.name || cat} value={cat.name || cat}>
@@ -203,10 +204,11 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
               value={formData.account_id}
               onValueChange={(value) => setFormData({ ...formData, account_id: value })}
               required
+              className="w-full"
             >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select account" />
+            </SelectTrigger>
               <SelectContent>
                 {accounts.map((account) => (
                   <SelectItem key={account.id} value={account.id}>
