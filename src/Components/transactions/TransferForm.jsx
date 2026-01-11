@@ -111,7 +111,7 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
           </SelectTrigger>
           <SelectContent>
             {accounts.map((account) => (
-              <SelectItem key={account.id} value={account.id}>
+              <SelectItem key={account.id} value={account.id} label={account.name}>
                 <div className="flex items-center gap-2">
                   <div 
                     className="w-3 h-3 rounded-full" 
@@ -144,7 +144,7 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
           </SelectTrigger>
           <SelectContent>
             {accounts.map((account) => (
-              <SelectItem key={account.id} value={account.id}>
+              <SelectItem key={account.id} value={account.id} label={account.name}>
                 <div className="flex items-center gap-2">
                   <div 
                     className="w-3 h-3 rounded-full" 

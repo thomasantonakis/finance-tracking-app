@@ -166,7 +166,7 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
             </SelectTrigger>
                 <SelectContent>
                   {categories.map((cat) => (
-                    <SelectItem key={cat.name || cat} value={cat.name || cat}>
+                    <SelectItem key={cat.name || cat} value={cat.name || cat} label={cat.name || cat}>
                       <div className="flex items-center gap-2">
                         {cat.color && (
                           <div 
@@ -178,7 +178,7 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
                       </div>
                     </SelectItem>
                   ))}
-                  <SelectItem value="__new__">
+                  <SelectItem value="__new__" label="+ New Category">
                     <div className="flex items-center gap-2 text-blue-600">
                       <span>+ New Category</span>
                     </div>

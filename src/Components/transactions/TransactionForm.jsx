@@ -182,7 +182,7 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
             </SelectTrigger>
             <SelectContent>
               {categories.map((cat) => (
-                <SelectItem key={cat.name || cat} value={cat.name || cat}>
+                <SelectItem key={cat.name || cat} value={cat.name || cat} label={cat.name || cat}>
                   <div className="flex items-center gap-2">
                     {cat.color && (
                       <div 
@@ -194,11 +194,11 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
                   </div>
                 </SelectItem>
               ))}
-              <SelectItem value="__new__">
-                <div className="flex items-center gap-2 text-blue-600">
-                  <span>+ New Category</span>
-                </div>
-              </SelectItem>
+                <SelectItem value="__new__" label="+ New Category">
+                  <div className="flex items-center gap-2 text-blue-600">
+                    <span>+ New Category</span>
+                  </div>
+                </SelectItem>
             </SelectContent>
           </Select>
         )}

@@ -46,9 +46,9 @@ export default function NetWorthCard({
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm font-medium text-slate-300">Current Net Worth</p>
           <Select value={period} onValueChange={onPeriodChange}>
-            <SelectTrigger className="w-40 h-8 bg-white/10 border-white/20 text-white text-xs">
-            <SelectValue />
-          </SelectTrigger>
+            <SelectTrigger variant="inverted" className="w-40 h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
           <SelectContent>
             <SelectItem value="last30">Last 30 days</SelectItem>
             <SelectItem value="last90">Last 90 days</SelectItem>
