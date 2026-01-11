@@ -39,8 +39,8 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
     account_id: initialData?.account_id || '',
     date: initialDate || format(new Date(), 'yyyy-MM-dd'),
     notes: initialData?.notes || '',
-    cleared: initialData?.cleared || false,
-    projected: initialData?.projected || false,
+    cleared: initialData?.cleared ?? true,
+    projected: initialData?.projected ?? true,
     newCategoryName: ''
   }));
 
@@ -52,8 +52,8 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
       account_id: initialData?.account_id || '',
       date: initialDate || format(new Date(), 'yyyy-MM-dd'),
       notes: initialData?.notes || '',
-      cleared: initialData?.cleared || false,
-      projected: initialData?.projected || false,
+      cleared: initialData?.cleared ?? true,
+      projected: initialData?.projected ?? true,
       newCategoryName: ''
     });
   }, [initialData, initialDate, type]);
@@ -227,7 +227,7 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
           </SelectTrigger>
           <SelectContent>
             {accounts.map((account) => (
-              <SelectItem key={account.id} value={account.id}>
+              <SelectItem key={account.id} value={account.id} label={account.name}>
                 <div className="flex items-center gap-2">
                   <div 
                     className="w-3 h-3 rounded-full" 

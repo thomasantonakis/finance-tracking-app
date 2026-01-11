@@ -84,6 +84,17 @@ export function formatPercent(value, decimals = 1) {
   }).format(safe);
 }
 
+export function formatNumber(value, maxDecimals = 1) {
+  const format = getNumberFormat();
+  const locale = format === "dot" ? "de-DE" : "en-US";
+  const num = Number(value);
+  const safe = Number.isFinite(num) ? num : 0;
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: maxDecimals,
+  }).format(safe);
+}
+
 export function getAccountsOrder() {
   try {
     const raw = localStorage.getItem(ACCOUNTS_ORDER_KEY);

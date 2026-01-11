@@ -27,7 +27,9 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
     from_account_id: transfer?.from_account_id || '',
     to_account_id: transfer?.to_account_id || '',
     date: transfer?.date || '',
-    notes: transfer?.notes || ''
+    notes: transfer?.notes || '',
+    cleared: transfer?.cleared ?? true,
+    projected: transfer?.projected ?? true
   });
 
   const { data: accounts = [] } = useQuery({
@@ -55,7 +57,9 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
       from_account_id: formData.from_account_id,
       to_account_id: formData.to_account_id,
       date: formData.date,
-      notes: formData.notes || undefined
+      notes: formData.notes || undefined,
+      cleared: formData.cleared,
+      projected: formData.projected
     });
     
     toast.success('Transfer updated successfully');
@@ -155,6 +159,29 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               rows={2}
             />
+          </div>
+
+          <div className="flex gap-4">
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="cleared"
+                checked={formData.cleared}
+                onChange={(e) => setFormData({ ...formData, cleared: e.target.checked })}
+                className="w-4 h-4 rounded"
+              />
+              <Label htmlFor="cleared" className="font-normal cursor-pointer">Cleared</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="projected"
+                checked={formData.projected}
+                onChange={(e) => setFormData({ ...formData, projected: e.target.checked })}
+                className="w-4 h-4 rounded"
+              />
+              <Label htmlFor="projected" className="font-normal cursor-pointer">Projected</Label>
+            </div>
           </div>
 
           {createdStamp && (

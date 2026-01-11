@@ -1,17 +1,17 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { motion } from 'framer-motion';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfYear, endOfYear, eachMonthOfInterval } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfYear, endOfYear, eachMonthOfInterval, endOfDay } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { formatAmount, useSessionState } from '@/utils';
+import { formatAmount, formatNumber, useSessionState } from '@/utils';
 
 export default function Charts() {
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentDate, setCurrentDate] = useSessionState('charts.currentDate', () => new Date());
   const [viewMode, setViewMode] = useSessionState('charts.viewMode', 'days'); // days, months, custom
   const [selectedAccount, setSelectedAccount] = useSessionState('charts.selectedAccount', 'all');
   const [chartType, setChartType] = useSessionState('charts.chartType', 'networth'); // networth, expense, income
@@ -56,15 +56,21 @@ export default function Charts() {
 
   const filterTransactions = (transactions) => {
     return transactions.filter(t => {
-      const clearedMatch = showCleared || !t.cleared;
-      const projectedMatch = showProjected || !t.projected;
-      const accountMatch = selectedAccount === 'all' || t.account_id === selectedAccount;
+      const clearedMatch = showCleared || t.cleared !== false;
+      const projectedMatch = showProjected || t.projected !== false;
+      const isTransfer = t.from_account_id || t.to_account_id;
+      const accountMatch = selectedAccount === 'all'
+        ? true
+        : isTransfer
+          ? (t.from_account_id === selectedAccount || t.to_account_id === selectedAccount)
+          : t.account_id === selectedAccount;
       return clearedMatch && projectedMatch && accountMatch;
     });
   };
 
   const filteredExpenses = filterTransactions(expenses);
   const filteredIncome = filterTransactions(income);
+  const filteredTransfers = filterTransactions(transfers);
 
   const lineChartData = useMemo(() => {
     let periods = [];
@@ -94,16 +100,29 @@ export default function Charts() {
       : (selectedAcc?.starting_balance || 0);
 
     return periods.map((period, index) => {
+      const periodEnd = viewMode === 'months' ? endOfMonth(period.date) : endOfDay(period.date);
+
       // Get all transactions up to and including this period
       const upToDateExpenses = filteredExpenses.filter(e => {
         const expenseDate = new Date(e.date);
-        return expenseDate <= period.date;
+        return expenseDate <= periodEnd;
       }).reduce((sum, e) => sum + e.amount, 0);
 
       const upToDateIncome = filteredIncome.filter(i => {
         const incomeDate = new Date(i.date);
-        return incomeDate <= period.date;
+        return incomeDate <= periodEnd;
       }).reduce((sum, i) => sum + i.amount, 0);
+
+      const upToDateTransferNet = selectedAccount === 'all'
+        ? 0
+        : filteredTransfers.filter(t => {
+            const transferDate = new Date(t.date);
+            return transferDate <= periodEnd;
+          }).reduce((sum, t) => {
+            if (t.to_account_id === selectedAccount) return sum + t.amount;
+            if (t.from_account_id === selectedAccount) return sum - t.amount;
+            return sum;
+          }, 0);
 
       // For period-specific data (for income/expense charts)
       const periodExpenses = filteredExpenses.filter(e => {
@@ -125,7 +144,7 @@ export default function Charts() {
       }).reduce((sum, i) => sum + i.amount, 0);
 
       // Calculate cumulative net worth (balance over time)
-      const networth = cumulativeBalance + upToDateIncome - upToDateExpenses;
+      const networth = cumulativeBalance + upToDateIncome - upToDateExpenses + upToDateTransferNet;
 
       return {
         name: period.label,
@@ -135,11 +154,38 @@ export default function Charts() {
         networth: networth
       };
     });
-  }, [viewMode, currentDate, filteredExpenses, filteredIncome, accounts, selectedAccount]);
+  }, [viewMode, currentDate, filteredExpenses, filteredIncome, filteredTransfers, accounts, selectedAccount]);
+
+  const { periodStart, periodEnd } = useMemo(() => {
+    if (viewMode === 'months') {
+      return {
+        periodStart: startOfYear(currentDate),
+        periodEnd: endOfYear(currentDate),
+      };
+    }
+    return {
+      periodStart: startOfMonth(currentDate),
+      periodEnd: endOfMonth(currentDate),
+    };
+  }, [viewMode, currentDate]);
+
+  const expensesInPeriod = useMemo(() => {
+    return filteredExpenses.filter((e) => {
+      const d = new Date(e.date);
+      return d >= periodStart && d <= periodEnd;
+    });
+  }, [filteredExpenses, periodStart, periodEnd]);
+
+  const incomeInPeriod = useMemo(() => {
+    return filteredIncome.filter((i) => {
+      const d = new Date(i.date);
+      return d >= periodStart && d <= periodEnd;
+    });
+  }, [filteredIncome, periodStart, periodEnd]);
 
   const expensePieData = useMemo(() => {
     const categoryTotals = {};
-    filteredExpenses.forEach(e => {
+    expensesInPeriod.forEach(e => {
       categoryTotals[e.category] = (categoryTotals[e.category] || 0) + e.amount;
     });
     return Object.entries(categoryTotals)
@@ -149,11 +195,11 @@ export default function Charts() {
         color: getCategoryColor(name, 'expense')
       }))
       .sort((a, b) => b.value - a.value); // Sort descending by amount
-  }, [filteredExpenses, expenseCategories]);
+  }, [expensesInPeriod, expenseCategories]);
 
   const incomePieData = useMemo(() => {
     const categoryTotals = {};
-    filteredIncome.forEach(i => {
+    incomeInPeriod.forEach(i => {
       categoryTotals[i.category] = (categoryTotals[i.category] || 0) + i.amount;
     });
     return Object.entries(categoryTotals)
@@ -163,10 +209,10 @@ export default function Charts() {
         color: getCategoryColor(name, 'income')
       }))
       .sort((a, b) => b.value - a.value); // Sort descending by amount
-  }, [filteredIncome, incomeCategories]);
+  }, [incomeInPeriod, incomeCategories]);
 
-  const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
-  const totalIncome = filteredIncome.reduce((sum, i) => sum + i.amount, 0);
+  const totalExpenses = expensesInPeriod.reduce((sum, e) => sum + e.amount, 0);
+  const totalIncome = incomeInPeriod.reduce((sum, i) => sum + i.amount, 0);
 
   const navigatePeriod = (direction) => {
     if (viewMode === 'days') {
@@ -216,9 +262,9 @@ export default function Charts() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Accounts</SelectItem>
+                  <SelectItem value="all" label="All Accounts">All Accounts</SelectItem>
                   {accounts.map(account => (
-                    <SelectItem key={account.id} value={account.id}>
+                    <SelectItem key={account.id} value={account.id} label={account.name}>
                       {account.name}
                     </SelectItem>
                   ))}
@@ -271,7 +317,7 @@ export default function Charts() {
                   <LineChart data={lineChartData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
-                    <YAxis />
+                    <YAxis tickFormatter={(value) => formatNumber(value, 1)} />
                     <Tooltip 
                       labelFormatter={(label, payload) => payload[0]?.payload?.fullName || label}
                       formatter={(value) => `€${formatAmount(value)}`}
@@ -287,7 +333,7 @@ export default function Charts() {
                   <LineChart data={lineChartData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
-                    <YAxis />
+                    <YAxis tickFormatter={(value) => formatNumber(value, 1)} />
                     <Tooltip 
                       labelFormatter={(label, payload) => payload[0]?.payload?.fullName || label}
                       formatter={(value) => `€${formatAmount(value)}`}
@@ -303,7 +349,7 @@ export default function Charts() {
                   <LineChart data={lineChartData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
-                    <YAxis />
+                    <YAxis tickFormatter={(value) => formatNumber(value, 1)} />
                     <Tooltip 
                       labelFormatter={(label, payload) => payload[0]?.payload?.fullName || label}
                       formatter={(value) => `€${formatAmount(value)}`}

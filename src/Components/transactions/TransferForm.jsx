@@ -23,7 +23,9 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
     from_account_id: initialData?.from_account_id || '',
     to_account_id: initialData?.to_account_id || '',
     date: initialDate || format(new Date(), 'yyyy-MM-dd'),
-    notes: initialData?.notes || ''
+    notes: initialData?.notes || '',
+    cleared: initialData?.cleared ?? true,
+    projected: initialData?.projected ?? true
   }));
 
   React.useEffect(() => {
@@ -32,7 +34,9 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
       from_account_id: initialData?.from_account_id || '',
       to_account_id: initialData?.to_account_id || '',
       date: initialDate || format(new Date(), 'yyyy-MM-dd'),
-      notes: initialData?.notes || ''
+      notes: initialData?.notes || '',
+      cleared: initialData?.cleared ?? true,
+      projected: initialData?.projected ?? true
     });
   }, [initialData, initialDate]);
 
@@ -66,7 +70,9 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
       from_account_id: formData.from_account_id,
       to_account_id: formData.to_account_id,
       date: formData.date,
-      notes: formData.notes || undefined
+      notes: formData.notes || undefined,
+      cleared: formData.cleared,
+      projected: formData.projected
     });
     
     toast.success('Transfer created successfully');
@@ -178,6 +184,29 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
           value={formData.notes}
           onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
         />
+      </div>
+
+      <div className="flex gap-4">
+        <div className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            id="cleared"
+            checked={formData.cleared}
+            onChange={(e) => setFormData({ ...formData, cleared: e.target.checked })}
+            className="w-4 h-4 rounded"
+          />
+          <Label htmlFor="cleared" className="font-normal cursor-pointer">Cleared</Label>
+        </div>
+        <div className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            id="projected"
+            checked={formData.projected}
+            onChange={(e) => setFormData({ ...formData, projected: e.target.checked })}
+            className="w-4 h-4 rounded"
+          />
+          <Label htmlFor="projected" className="font-normal cursor-pointer">Projected</Label>
+        </div>
       </div>
 
       <div className="flex gap-3 pt-2">

@@ -43,6 +43,21 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
     queryFn: () => base44.entities.Account.list(),
   });
 
+  React.useEffect(() => {
+    if (!transaction) return;
+    setFormData({
+      amount: transaction?.amount?.toString() || '',
+      category: transaction?.category || '',
+      subcategory: transaction?.subcategory || '',
+      account_id: transaction?.account_id || '',
+      date: transaction?.date || format(new Date(), 'yyyy-MM-dd'),
+      notes: transaction?.notes || '',
+      cleared: transaction?.cleared ?? true,
+      projected: transaction?.projected ?? true,
+      newCategoryName: ''
+    });
+  }, [transaction, type]);
+
   const entityName = type === 'income' ? 'IncomeCategory' : 'ExpenseCategory';
   const { data: customCategories = [] } = useQuery({
     queryKey: [entityName],
