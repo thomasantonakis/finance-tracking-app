@@ -8,12 +8,13 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { formatAmount, useSessionState } from '@/utils';
 
 export default function Charts() {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState('days'); // days, months, custom
-  const [selectedAccount, setSelectedAccount] = useState('all');
-  const [chartType, setChartType] = useState('networth'); // networth, expense, income
+  const [viewMode, setViewMode] = useSessionState('charts.viewMode', 'days'); // days, months, custom
+  const [selectedAccount, setSelectedAccount] = useSessionState('charts.selectedAccount', 'all');
+  const [chartType, setChartType] = useSessionState('charts.chartType', 'networth'); // networth, expense, income
   const [showCleared, setShowCleared] = useState(true);
   const [showProjected, setShowProjected] = useState(true);
 
@@ -273,7 +274,7 @@ export default function Charts() {
                     <YAxis />
                     <Tooltip 
                       labelFormatter={(label, payload) => payload[0]?.payload?.fullName || label}
-                      formatter={(value) => `€${value.toFixed(2)}`}
+                      formatter={(value) => `€${formatAmount(value)}`}
                     />
                     <Legend />
                     <Line type="monotone" dataKey="networth" stroke="#10b981" strokeWidth={2} name="Net Worth" />
@@ -289,7 +290,7 @@ export default function Charts() {
                     <YAxis />
                     <Tooltip 
                       labelFormatter={(label, payload) => payload[0]?.payload?.fullName || label}
-                      formatter={(value) => `€${value.toFixed(2)}`}
+                      formatter={(value) => `€${formatAmount(value)}`}
                     />
                     <Legend />
                     <Line type="monotone" dataKey="expenses" stroke="#ef4444" strokeWidth={2} name="Expenses" />
@@ -305,7 +306,7 @@ export default function Charts() {
                     <YAxis />
                     <Tooltip 
                       labelFormatter={(label, payload) => payload[0]?.payload?.fullName || label}
-                      formatter={(value) => `€${value.toFixed(2)}`}
+                      formatter={(value) => `€${formatAmount(value)}`}
                     />
                     <Legend />
                     <Line type="monotone" dataKey="income" stroke="#22c55e" strokeWidth={2} name="Income" />
@@ -319,7 +320,7 @@ export default function Charts() {
             <div className="bg-white rounded-2xl p-6 border border-slate-100">
               <h2 className="text-lg font-bold text-slate-900 mb-4">Expenses</h2>
               <div className="text-center mb-4">
-                <p className="text-3xl font-bold text-red-600 tabular-nums">€{totalExpenses.toFixed(2)}</p>
+                <p className="text-3xl font-bold text-red-600 tabular-nums">€{formatAmount(totalExpenses)}</p>
               </div>
               {expensePieData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={250}>
@@ -341,7 +342,7 @@ export default function Charts() {
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value) => `€${value.toFixed(2)}`} />
+                    <Tooltip formatter={(value) => `€${formatAmount(value)}`} />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
@@ -352,7 +353,7 @@ export default function Charts() {
             <div className="bg-white rounded-2xl p-6 border border-slate-100">
               <h2 className="text-lg font-bold text-slate-900 mb-4">Income</h2>
               <div className="text-center mb-4">
-                <p className="text-3xl font-bold text-green-600 tabular-nums">€{totalIncome.toFixed(2)}</p>
+                <p className="text-3xl font-bold text-green-600 tabular-nums">€{formatAmount(totalIncome)}</p>
               </div>
               {incomePieData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={250}>
@@ -374,7 +375,7 @@ export default function Charts() {
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value) => `€${value.toFixed(2)}`} />
+                    <Tooltip formatter={(value) => `€${formatAmount(value)}`} />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (

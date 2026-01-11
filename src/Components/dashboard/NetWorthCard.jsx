@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { formatAmount, formatPercent } from '@/utils';
 
 export default function NetWorthCard({
   totalIncome,
@@ -23,12 +24,12 @@ export default function NetWorthCard({
   const isNeutral = periodChange === 0;
   const absChange = Math.abs(periodChange);
   const percentChange = netWorthDeltaPercent ?? 0;
-  const percentText = Number.isFinite(percentChange) ? Math.abs(percentChange).toFixed(1) : '∞';
+  const percentText = Number.isFinite(percentChange) ? formatPercent(Math.abs(percentChange), 1) : '∞';
   const deltaClass = isPositive ? "text-green-400" : isNegative ? "text-red-400" : "text-slate-400";
   const incomeDeltaValue = incomeDelta ?? 0;
   const expenseDeltaValue = expenseDelta ?? 0;
-  const incomeDeltaText = Number.isFinite(incomeDeltaPercent) ? Math.abs(incomeDeltaPercent).toFixed(1) : '∞';
-  const expenseDeltaText = Number.isFinite(expenseDeltaPercent) ? Math.abs(expenseDeltaPercent).toFixed(1) : '∞';
+  const incomeDeltaText = Number.isFinite(incomeDeltaPercent) ? formatPercent(Math.abs(incomeDeltaPercent), 1) : '∞';
+  const expenseDeltaText = Number.isFinite(expenseDeltaPercent) ? formatPercent(Math.abs(expenseDeltaPercent), 1) : '∞';
   const incomeDeltaClass = incomeDeltaValue > 0 ? "text-green-400" : incomeDeltaValue < 0 ? "text-red-400" : "text-slate-400";
   const expenseDeltaClass = expenseDeltaValue > 0 ? "text-red-400" : expenseDeltaValue < 0 ? "text-green-400" : "text-slate-400";
 
@@ -59,7 +60,7 @@ export default function NetWorthCard({
       </div>
         <div className="flex items-baseline gap-3 mb-6">
           <h1 className="text-5xl font-bold tracking-tight tabular-nums">
-            €{currentNetWorth.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            €{formatAmount(currentNetWorth)}
           </h1>
           {isPositive ? (
             <TrendingUp className="w-8 h-8 text-green-400" />
@@ -70,10 +71,12 @@ export default function NetWorthCard({
           )}
         </div>
         <div className="text-sm text-slate-300 mb-6">
+          <span className="text-slate-400">Δ:</span>{" "}
           <span className={deltaClass}>
-            {isPositive ? "+" : isNegative ? "-" : ""}€{absChange.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {isPositive ? "+" : isNegative ? "-" : ""}€{formatAmount(absChange)}
           </span>
           <span className="text-slate-400"> · </span>
+          <span className="text-slate-400">Δ%:</span>{" "}
           <span className={deltaClass}>
             {isPositive ? "+" : isNegative ? "-" : ""}{percentText}%
           </span>
@@ -83,19 +86,25 @@ export default function NetWorthCard({
           <div className="space-y-1">
             <p className="text-xs font-medium text-slate-400">Income</p>
             <p className="text-xl font-semibold text-green-400 tabular-nums">
-              +€{totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              +€{formatAmount(totalIncome)}
             </p>
             <p className={`text-xs tabular-nums ${incomeDeltaClass}`}>
-              {incomeDeltaValue > 0 ? "+" : incomeDeltaValue < 0 ? "-" : ""}€{Math.abs(incomeDeltaValue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {incomeDeltaValue > 0 ? "+" : incomeDeltaValue < 0 ? "-" : ""}{incomeDeltaText}%
+              <span className="text-slate-400">Δ:</span>{" "}
+              {incomeDeltaValue > 0 ? "+" : incomeDeltaValue < 0 ? "-" : ""}€{formatAmount(Math.abs(incomeDeltaValue))}
+              <span className="text-slate-400"> · Δ%:</span>{" "}
+              {incomeDeltaValue > 0 ? "+" : incomeDeltaValue < 0 ? "-" : ""}{incomeDeltaText}%
             </p>
           </div>
           <div className="space-y-1">
             <p className="text-xs font-medium text-slate-400">Expenses</p>
             <p className="text-xl font-semibold text-red-400 tabular-nums">
-              -€{totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              -€{formatAmount(totalExpenses)}
             </p>
             <p className={`text-xs tabular-nums ${expenseDeltaClass}`}>
-              {expenseDeltaValue > 0 ? "+" : expenseDeltaValue < 0 ? "-" : ""}€{Math.abs(expenseDeltaValue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {expenseDeltaValue > 0 ? "+" : expenseDeltaValue < 0 ? "-" : ""}{expenseDeltaText}%
+              <span className="text-slate-400">Δ:</span>{" "}
+              {expenseDeltaValue > 0 ? "+" : expenseDeltaValue < 0 ? "-" : ""}€{formatAmount(Math.abs(expenseDeltaValue))}
+              <span className="text-slate-400"> · Δ%:</span>{" "}
+              {expenseDeltaValue > 0 ? "+" : expenseDeltaValue < 0 ? "-" : ""}{expenseDeltaText}%
             </p>
           </div>
         </div>

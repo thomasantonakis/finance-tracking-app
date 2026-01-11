@@ -2,12 +2,34 @@ import React from "react";
 
 const SelectCtx = React.createContext(null);
 
+const collectLabels = (nodes, map) => {
+  React.Children.forEach(nodes, (child) => {
+    if (!React.isValidElement(child)) return;
+    const typeName = child.type?.displayName;
+    if (typeName === "SelectItem") {
+      const { value, label, children } = child.props || {};
+      const text = label ?? (typeof children === "string" ? children : null);
+      if (value && text) {
+        map[value] = text;
+      }
+    }
+    if (child.props?.children) {
+      collectLabels(child.props.children, map);
+    }
+  });
+};
+
 export function Select({ value, defaultValue, onValueChange, children, className = "" }) {
   const [internal, setInternal] = React.useState(defaultValue ?? value);
   const [open, setOpen] = React.useState(false);
   const [labels, setLabels] = React.useState({});
   const current = value ?? internal;
   const wrapperRef = React.useRef(null);
+  const staticLabels = React.useMemo(() => {
+    const map = {};
+    collectLabels(children, map);
+    return map;
+  }, [children]);
 
   const setValue = (v) => {
     if (value === undefined) setInternal(v);
@@ -32,7 +54,16 @@ export function Select({ value, defaultValue, onValueChange, children, className
   }, [open]);
 
   return (
-    <SelectCtx.Provider value={{ value: current, setValue, open, setOpen, labels, registerLabel }}>
+    <SelectCtx.Provider
+      value={{
+        value: current,
+        setValue,
+        open,
+        setOpen,
+        labels: { ...staticLabels, ...labels },
+        registerLabel,
+      }}
+    >
       <div ref={wrapperRef} className={`relative inline-block ${className}`}>
         {children}
       </div>
@@ -93,3 +124,5 @@ export function SelectItem({ value, children, label }) {
     </div>
   );
 }
+
+SelectItem.displayName = "SelectItem";

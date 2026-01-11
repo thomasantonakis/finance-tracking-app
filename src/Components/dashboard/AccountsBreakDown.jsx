@@ -5,6 +5,7 @@ import {
   Plane, CreditCard, Home, MoreHorizontal, DollarSign, Briefcase,
   TrendingUp, Gift, RefreshCw, Building2, Award
 } from 'lucide-react';
+import { formatAmount } from '@/utils';
 
 const categoryIcons = {
   food: Utensils,
@@ -75,7 +76,7 @@ export default function CategoryBreakdown({ data, type, total }) {
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-bold text-slate-900 tabular-nums">
-                    €{item.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    €{formatAmount(item.total)}
                   </p>
                   <p className="text-xs text-slate-400">{percentage.toFixed(1)}%</p>
                 </div>

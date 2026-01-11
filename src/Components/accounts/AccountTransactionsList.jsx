@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import EditTransactionModal from '../transactions/EditTransactionModal';
 import EditTransferModal from '../transactions/EditTransferModal';
 import DuplicateTransactionModal from '../transactions/DuplicateTransactionModal';
+import { formatAmount } from '@/utils';
 
 export default function AccountTransactionsList({ 
   selectedAccount, 
@@ -151,7 +152,7 @@ export default function AccountTransactionsList({
                           {transaction.type === 'income' ? '+' : 
                            transaction.type === 'transfer' ?
                              (transaction.from_account_id === selectedAccount ? '-' : '+')
-                           : '-'}€{transaction.amount.toFixed(2)}
+                           : '-'}€{formatAmount(transaction.amount)}
                         </p>
                         <Button
                           variant="ghost"
@@ -178,7 +179,7 @@ export default function AccountTransactionsList({
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Bal: €{transactionBalance.toFixed(2)}</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Bal: €{formatAmount(transactionBalance)}</p>
                     </div>
                   </div>
                 );

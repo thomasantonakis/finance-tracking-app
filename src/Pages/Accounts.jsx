@@ -8,6 +8,8 @@ import { toast } from 'sonner';
 import AccountForm from '../Components/accounts/AccountForm';
 import AccountsList from '../Components/accounts/AccountsList';
 import AccountTransactionsList from '../Components/accounts/AccountTransactionsList';
+import { formatAmount } from '@/utils';
+import { getAccountsOrder, setAccountsOrder } from '@/utils';
 import {
   Dialog,
   DialogContent,
@@ -22,19 +24,28 @@ export default function Accounts() {
   const [orderedAccounts, setOrderedAccounts] = useState([]);
   const queryClient = useQueryClient();
 
+  const applyStoredOrder = (list) => {
+    const order = getAccountsOrder();
+    if (!order.length) return list;
+    const byId = new Map(list.map((acc) => [acc.id, acc]));
+    const ordered = order.map((id) => byId.get(id)).filter(Boolean);
+    const remaining = list.filter((acc) => !order.includes(acc.id));
+    return [...ordered, ...remaining];
+  };
+
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts'],
     queryFn: () => base44.entities.Account.list(),
     onSuccess: (data) => {
       if (orderedAccounts.length === 0) {
-        setOrderedAccounts(data);
+        setOrderedAccounts(applyStoredOrder(data));
       }
     }
   });
 
   React.useEffect(() => {
-    if (accounts.length > 0 && orderedAccounts.length === 0) {
-      setOrderedAccounts(accounts);
+    if (accounts.length > 0 && (orderedAccounts.length === 0 || accounts.length !== orderedAccounts.length)) {
+      setOrderedAccounts(applyStoredOrder(accounts));
     }
   }, [accounts]);
 
@@ -127,6 +138,7 @@ export default function Accounts() {
     const [removed] = reordered.splice(sourceIndex, 1);
     reordered.splice(destinationIndex, 0, removed);
     setOrderedAccounts(reordered);
+    setAccountsOrder(reordered.map((acc) => acc.id));
   };
 
   const handleDelete = (id, type) => {
@@ -189,7 +201,7 @@ export default function Accounts() {
               </div>
               <div className="text-center py-4">
                 <p className="text-sm text-slate-500 mb-1">Current Balance</p>
-                <p className="text-4xl font-bold text-slate-900 tabular-nums">€{balance.toFixed(2)}</p>
+                <p className="text-4xl font-bold text-slate-900 tabular-nums">€{formatAmount(balance)}</p>
               </div>
             </div>
 

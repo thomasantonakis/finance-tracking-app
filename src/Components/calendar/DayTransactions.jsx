@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import EditTransactionModal from '../transactions/EditTransactionModal';
 import EditTransferModal from '../transactions/EditTransferModal';
 import DuplicateTransactionModal from '../transactions/DuplicateTransactionModal';
+import { formatAmount } from '@/utils';
 
 export default function DayTransactions({ 
   selectedDate, 
@@ -65,7 +66,7 @@ export default function DayTransactions({
           <p className={`text-2xl font-bold tabular-nums ${
             netTotal >= 0 ? 'text-green-600' : 'text-red-600'
           }`}>
-            €{Math.abs(netTotal).toFixed(2)}
+            €{formatAmount(Math.abs(netTotal))}
           </p>
           <p className="text-xs text-slate-400">Net</p>
         </div>
@@ -140,7 +141,7 @@ export default function DayTransactions({
                       ? 'text-blue-600'
                       : 'text-red-600'
                   }`}>
-                    {transaction.type === 'transfer' ? '' : transaction.type === 'income' ? '+' : '-'}€{transaction.amount.toFixed(2)}
+                    {transaction.type === 'transfer' ? '' : transaction.type === 'income' ? '+' : '-'}€{formatAmount(transaction.amount)}
                   </p>
                   <Button
                     variant="ghost"

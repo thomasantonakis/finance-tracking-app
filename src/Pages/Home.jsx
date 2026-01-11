@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { motion } from 'framer-motion';
@@ -19,10 +19,11 @@ import CategoryBreakdown from '../Components/dashboard/CategoryBreakdown';
 import RecentTransactions from '../Components/dashboard/RecentTransactions';
 import FloatingAddButton from '../Components/transactions/FloatingAddButton';
 import AccountsBreakdown from '../Components/dashboard/AccountsBreakdown';
+import { useSessionState } from '@/utils';
 
 export default function Home() {
   const queryClient = useQueryClient();
-  const [selectedPeriod, setSelectedPeriod] = useState('last30');
+  const [selectedPeriod, setSelectedPeriod] = useSessionState('home.selectedPeriod', 'last30');
 
   const { data: expenses = [], isLoading: loadingExpenses } = useQuery({
     queryKey: ['expenses'],

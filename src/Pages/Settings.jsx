@@ -4,10 +4,12 @@ import { base44 } from '@/api/base44Client';
 import { motion } from 'framer-motion';
 import { Download, Upload, LogOut, Palette, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import CategoryManager from '../Components/settings/CategoryManager';
 import { Progress } from '@/components/ui/progress';
+import { getNumberFormat, setNumberFormat } from '@/utils';
 
 const defaultColors = [
   '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#22c55e', '#10b981',
@@ -17,12 +19,17 @@ const defaultColors = [
 
 export default function Settings() {
   const [showCustomize, setShowCustomize] = useState(false);
+  const [numberFormat, setNumberFormatState] = useState(getNumberFormat());
   const [importing, setImporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState(0);
   const [importProgress, setImportProgress] = useState(0);
   const [importLogs, setImportLogs] = useState([]);
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    setNumberFormat(numberFormat);
+  }, [numberFormat]);
 
   useEffect(() => {
     const handleBeforeUnload = (e) => {
@@ -497,6 +504,30 @@ export default function Settings() {
               </div>
               
               <div className="divide-y divide-slate-100">
+                <div className="w-full flex items-center gap-3 p-4">
+                  <div className="p-2 rounded-lg bg-slate-50">
+                    <span className="text-slate-600 font-semibold">1.2</span>
+                  </div>
+                  <div className="flex-1 text-left">
+                    <p className="font-medium text-slate-900">Number Format</p>
+                    <p className="text-sm text-slate-500">Choose thousands and decimal separators</p>
+                  </div>
+                  <div className="w-64">
+                    <Select value={numberFormat} onValueChange={setNumberFormatState}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select number format" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="dot" label="1.234,56">
+                          1.234,56
+                        </SelectItem>
+                        <SelectItem value="comma" label="1,234.56">
+                          1,234.56
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
                 <button
                   onClick={() => setShowCustomize(!showCustomize)}
                   className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors"

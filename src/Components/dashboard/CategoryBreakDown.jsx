@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Wallet, CreditCard, PiggyBank, TrendingUp, MoreHorizontal } from 'lucide-react';
+import { formatAmount } from '@/utils';
 
 const categoryIcons = {
   cash: Wallet,
@@ -61,7 +62,7 @@ export default function AccountsBreakdown({ accounts, accountBalances }) {
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-bold text-slate-900 tabular-nums">
-                    €{balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    €{formatAmount(balance)}
                   </p>
                   <p className="text-xs text-slate-400">{percentage.toFixed(1)}%</p>
                 </div>

@@ -8,6 +8,7 @@ import { base44 } from '@/api/base44Client';
 import EditTransactionModal from '../transactions/EditTransactionModal';
 import EditTransferModal from '../transactions/EditTransferModal';
 import DuplicateTransactionModal from '../transactions/DuplicateTransactionModal';
+import { formatAmount } from '@/utils';
 
 export default function RecentTransactions({ transactions, onDelete, onUpdate }) {
   const [editingTransaction, setEditingTransaction] = useState(null);
@@ -117,7 +118,7 @@ export default function RecentTransactions({ transactions, onDelete, onUpdate })
                     ? 'text-blue-600'
                     : 'text-red-600'
                 }`}>
-                  {transaction.type === 'transfer' ? '' : transaction.type === 'income' ? '+' : '-'}€{transaction.amount.toFixed(2)}
+                  {transaction.type === 'transfer' ? '' : transaction.type === 'income' ? '+' : '-'}€{formatAmount(transaction.amount)}
                 </p>
                 <Button
                   variant="ghost"

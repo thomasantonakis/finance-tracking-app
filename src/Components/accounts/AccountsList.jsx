@@ -3,6 +3,7 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { motion } from 'framer-motion';
 import { GripVertical, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { formatAmount } from '@/utils';
 
 export default function AccountsList({ accounts, editMode, onReorder, onEdit, onSelect, getAccountBalance }) {
   const handleDragEnd = (result) => {
@@ -101,7 +102,7 @@ export default function AccountsList({ accounts, editMode, onReorder, onEdit, on
               <div className="flex items-center gap-2">
                 <div className="text-right">
                   <p className="text-lg font-bold text-slate-900 tabular-nums">
-                    €{balance.toFixed(2)}
+                    €{formatAmount(balance)}
                   </p>
                 </div>
                 <ChevronRight className="w-5 h-5 text-slate-400" />

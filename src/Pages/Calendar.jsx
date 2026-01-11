@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { motion } from 'framer-motion';
@@ -9,12 +9,13 @@ import { toast } from 'sonner';
 import CalendarGrid from '../Components/calendar/CalendarGrid';
 import DayTransactions from '../Components/calendar/DayTransactions';
 import FloatingAddButton from '../Components/transactions/FloatingAddButton';
+import { useSessionState } from '@/utils';
 
 export default function Calendar() {
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [collapsed, setCollapsed] = useState(false);
-  const [weekView, setWeekView] = useState(false);
+  const [currentDate, setCurrentDate] = useSessionState('calendar.currentDate', () => new Date());
+  const [selectedDate, setSelectedDate] = useSessionState('calendar.selectedDate', () => new Date());
+  const [collapsed, setCollapsed] = useSessionState('calendar.collapsed', false);
+  const [weekView, setWeekView] = useSessionState('calendar.weekView', false);
   const queryClient = useQueryClient();
 
   const { data: expenses = [] } = useQuery({
