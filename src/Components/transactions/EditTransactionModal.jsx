@@ -20,6 +20,7 @@ import { base44 } from '@/api/base44Client';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
+import { sortAccountsByOrder } from '@/utils';
 
 const expenseCategories = ['food', 'transport', 'utilities', 'entertainment', 'shopping', 'health', 'education', 'travel', 'subscriptions', 'housing', 'other'];
 const incomeCategories = ['salary', 'freelance', 'investment', 'business', 'gift', 'refund', 'rental', 'bonus', 'other'];
@@ -42,6 +43,7 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
     queryKey: ['accounts'],
     queryFn: () => base44.entities.Account.list(),
   });
+  const orderedAccounts = sortAccountsByOrder(accounts);
 
   React.useEffect(() => {
     if (!transaction) return;
@@ -64,6 +66,12 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
     queryFn: () => base44.entities[entityName].list(),
   });
 
+  const transactionEntity = type === 'income' ? 'Income' : 'Expense';
+  const { data: transactions = [] } = useQuery({
+    queryKey: [transactionEntity],
+    queryFn: () => base44.entities[transactionEntity].list(),
+  });
+
   // Deduplicate categories by name (keep first occurrence)
   const deduplicatedCategories = customCategories.length > 0 
     ? customCategories
@@ -73,7 +81,23 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
         )
     : (type === 'income' ? incomeCategories : expenseCategories).map(cat => ({ name: cat, color: '#64748b' }));
 
-  const categories = deduplicatedCategories;
+  const categories = React.useMemo(() => {
+    const totals = transactions.reduce((acc, t) => {
+      const key = (t.category || '').toLowerCase();
+      if (!key) return acc;
+      acc[key] = (acc[key] || 0) + (t.amount || 0);
+      return acc;
+    }, {});
+
+    return [...deduplicatedCategories].sort((a, b) => {
+      const aKey = (a.name || a).toLowerCase();
+      const bKey = (b.name || b).toLowerCase();
+      const aTotal = totals[aKey] || 0;
+      const bTotal = totals[bKey] || 0;
+      if (aTotal !== bTotal) return bTotal - aTotal;
+      return aKey.localeCompare(bKey);
+    });
+  }, [deduplicatedCategories, transactions]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -225,7 +249,7 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
               <SelectValue placeholder="Select account" />
             </SelectTrigger>
               <SelectContent>
-                {accounts.map((account) => (
+                {orderedAccounts.map((account) => (
                   <SelectItem key={account.id} value={account.id}>
                     {account.name}
                   </SelectItem>

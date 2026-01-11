@@ -113,3 +113,12 @@ export function setAccountsOrder(order) {
     // Ignore storage failures.
   }
 }
+
+export function sortAccountsByOrder(accounts) {
+  const order = getAccountsOrder();
+  if (!order.length) return accounts;
+  const byId = new Map(accounts.map((acc) => [acc.id, acc]));
+  const ordered = order.map((id) => byId.get(id)).filter(Boolean);
+  const remaining = accounts.filter((acc) => !order.includes(acc.id));
+  return [...ordered, ...remaining];
+}

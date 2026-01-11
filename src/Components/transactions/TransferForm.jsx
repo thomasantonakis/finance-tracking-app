@@ -15,6 +15,7 @@ import { base44 } from '@/api/base44Client';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight } from 'lucide-react';
+import { sortAccountsByOrder } from '@/utils';
 
 export default function TransferForm({ onSuccess, onCancel, initialData, initialDate, onAfterCreate }) {
   const [loading, setLoading] = useState(false);
@@ -44,6 +45,7 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
     queryKey: ['accounts'],
     queryFn: () => base44.entities.Account.list(),
   });
+  const orderedAccounts = sortAccountsByOrder(accounts);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -116,7 +118,7 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
             <SelectValue placeholder="Select source account" />
           </SelectTrigger>
           <SelectContent>
-            {accounts.map((account) => (
+            {orderedAccounts.map((account) => (
               <SelectItem key={account.id} value={account.id} label={account.name}>
                 <div className="flex items-center gap-2">
                   <div 
@@ -149,7 +151,7 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
             <SelectValue placeholder="Select destination account" />
           </SelectTrigger>
           <SelectContent>
-            {accounts.map((account) => (
+            {orderedAccounts.map((account) => (
               <SelectItem key={account.id} value={account.id} label={account.name}>
                 <div className="flex items-center gap-2">
                   <div 

@@ -19,6 +19,7 @@ import {
 import { base44 } from '@/api/base44Client';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
+import { sortAccountsByOrder } from '@/utils';
 
 export default function EditTransferModal({ open, onOpenChange, transfer, onSuccess }) {
   const [loading, setLoading] = useState(false);
@@ -36,6 +37,7 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
     queryKey: ['accounts'],
     queryFn: () => base44.entities.Account.list(),
   });
+  const orderedAccounts = sortAccountsByOrder(accounts);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -109,7 +111,7 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {accounts.map((account) => (
+                {orderedAccounts.map((account) => (
                   <SelectItem key={account.id} value={account.id}>
                     {account.name}
                   </SelectItem>
@@ -130,7 +132,7 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {accounts.map((account) => (
+                {orderedAccounts.map((account) => (
                   <SelectItem key={account.id} value={account.id}>
                     {account.name}
                   </SelectItem>
