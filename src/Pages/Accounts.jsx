@@ -21,6 +21,7 @@ export default function Accounts() {
   const [editMode, setEditMode] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [editingAccount, setEditingAccount] = useState(null);
+  const [creatingAccount, setCreatingAccount] = useState(false);
   const [orderedAccounts, setOrderedAccounts] = useState([]);
   const queryClient = useQueryClient();
 
@@ -131,6 +132,7 @@ export default function Accounts() {
   const handleAccountFormSuccess = () => {
     queryClient.invalidateQueries({ queryKey: ['accounts'] });
     setEditingAccount(null);
+    setCreatingAccount(false);
   };
 
   const handleReorder = (sourceIndex, destinationIndex) => {
@@ -229,23 +231,47 @@ export default function Accounts() {
         >
           <div className="flex items-center justify-between mb-6">
             <h1 className="text-2xl font-bold text-slate-900">Accounts</h1>
-            <Button
-              variant={editMode ? 'default' : 'outline'}
-              onClick={() => setEditMode(!editMode)}
-              className={editMode ? 'bg-slate-900' : ''}
-            >
-              {editMode ? <><Check className="w-4 h-4 mr-2" /> Done</> : <><Edit3 className="w-4 h-4 mr-2" /> Edit</>}
-            </Button>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="default"
+                className="bg-slate-900"
+                onClick={() => setCreatingAccount(true)}
+              >
+                + Add Account
+              </Button>
+              <Button
+                variant={editMode ? 'default' : 'outline'}
+                onClick={() => setEditMode(!editMode)}
+                className={editMode ? 'bg-slate-900' : ''}
+              >
+                {editMode ? <><Check className="w-4 h-4 mr-2" /> Done</> : <><Edit3 className="w-4 h-4 mr-2" /> Edit</>}
+              </Button>
+            </div>
           </div>
 
-          <AccountsList
-            accounts={displayAccounts}
-            editMode={editMode}
-            onReorder={handleReorder}
-            onEdit={setEditingAccount}
-            onSelect={setSelectedAccount}
-            getAccountBalance={getAccountBalance}
-          />
+          {displayAccounts.length === 0 ? (
+            <div className="bg-white rounded-2xl p-8 border border-slate-100 text-center">
+              <h2 className="text-lg font-semibold text-slate-900 mb-2">No accounts yet</h2>
+              <p className="text-sm text-slate-500 mb-4">
+                Create your first account to start tracking balances.
+              </p>
+              <Button
+                className="bg-slate-900"
+                onClick={() => setCreatingAccount(true)}
+              >
+                + Add Account
+              </Button>
+            </div>
+          ) : (
+            <AccountsList
+              accounts={displayAccounts}
+              editMode={editMode}
+              onReorder={handleReorder}
+              onEdit={setEditingAccount}
+              onSelect={setSelectedAccount}
+              getAccountBalance={getAccountBalance}
+            />
+          )}
         </motion.div>
       </div>
 
@@ -261,6 +287,18 @@ export default function Accounts() {
               onCancel={() => setEditingAccount(null)}
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={creatingAccount} onOpenChange={setCreatingAccount}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Account</DialogTitle>
+          </DialogHeader>
+          <AccountForm
+            onSuccess={handleAccountFormSuccess}
+            onCancel={() => setCreatingAccount(false)}
+          />
         </DialogContent>
       </Dialog>
     </div>

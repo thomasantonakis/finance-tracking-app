@@ -7,7 +7,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { formatAmount, formatNumber, useSessionState } from '@/utils';
 
 export default function Charts() {
@@ -17,6 +17,8 @@ export default function Charts() {
   const [chartType, setChartType] = useSessionState('charts.chartType', 'networth'); // networth, expense, income
   const [showCleared, setShowCleared] = useState(true);
   const [showProjected, setShowProjected] = useState(true);
+  const [showCumulativeBars, setShowCumulativeBars] = useState(false);
+  const [detailChartMode, setDetailChartMode] = useState('bars');
 
   const { data: expenses = [] } = useQuery({
     queryKey: ['expenses'],
@@ -183,6 +185,27 @@ export default function Charts() {
     });
   }, [filteredIncome, periodStart, periodEnd]);
 
+  const barChartData = useMemo(() => {
+    let cumIncome = 0;
+    let cumExpenses = 0;
+    return lineChartData.map((point) => {
+      if (!showCumulativeBars) {
+        return {
+          ...point,
+          income: point.income,
+          expenses: point.expenses,
+        };
+      }
+      cumIncome += point.income;
+      cumExpenses += point.expenses;
+      return {
+        ...point,
+        income: cumIncome,
+        expenses: cumExpenses,
+      };
+    });
+  }, [lineChartData, showCumulativeBars]);
+
   const expensePieData = useMemo(() => {
     const categoryTotals = {};
     expensesInPeriod.forEach(e => {
@@ -305,61 +328,80 @@ export default function Charts() {
               </div>
             </div>
 
-            <Tabs value={chartType} onValueChange={setChartType} className="w-full">
-              <TabsList className="grid w-full grid-cols-3 gap-1 mb-6">
-                <TabsTrigger value="networth">Net Worth</TabsTrigger>
-                <TabsTrigger value="expense">Expense</TabsTrigger>
-                <TabsTrigger value="income">Income</TabsTrigger>
-              </TabsList>
+            <div>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={lineChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis tickFormatter={(value) => formatNumber(value, 1)} />
+                  <Tooltip 
+                    labelFormatter={(label, payload) => payload[0]?.payload?.fullName || label}
+                    formatter={(value) => `€${formatAmount(value)}`}
+                  />
+                  <Legend />
+                  <Line type="monotone" dataKey="networth" stroke="#10b981" strokeWidth={2} name="Net Worth" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
 
-              <TabsContent value="networth">
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={lineChartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis tickFormatter={(value) => formatNumber(value, 1)} />
-                    <Tooltip 
-                      labelFormatter={(label, payload) => payload[0]?.payload?.fullName || label}
-                      formatter={(value) => `€${formatAmount(value)}`}
-                    />
-                    <Legend />
-                    <Line type="monotone" dataKey="networth" stroke="#10b981" strokeWidth={2} name="Net Worth" />
-                  </LineChart>
-                </ResponsiveContainer>
-              </TabsContent>
-
-              <TabsContent value="expense">
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={lineChartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis tickFormatter={(value) => formatNumber(value, 1)} />
-                    <Tooltip 
-                      labelFormatter={(label, payload) => payload[0]?.payload?.fullName || label}
-                      formatter={(value) => `€${formatAmount(value)}`}
-                    />
-                    <Legend />
-                    <Line type="monotone" dataKey="expenses" stroke="#ef4444" strokeWidth={2} name="Expenses" />
-                  </LineChart>
-                </ResponsiveContainer>
-              </TabsContent>
-
-              <TabsContent value="income">
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={lineChartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis tickFormatter={(value) => formatNumber(value, 1)} />
-                    <Tooltip 
-                      labelFormatter={(label, payload) => payload[0]?.payload?.fullName || label}
-                      formatter={(value) => `€${formatAmount(value)}`}
-                    />
-                    <Legend />
-                    <Line type="monotone" dataKey="income" stroke="#22c55e" strokeWidth={2} name="Income" />
-                  </LineChart>
-                </ResponsiveContainer>
-              </TabsContent>
-            </Tabs>
+            <div className="bg-white rounded-2xl p-6 mb-6 border border-slate-100">
+              <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-slate-900">Income vs Expenses</h2>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDetailChartMode((prev) => (prev === 'bars' ? 'line' : 'bars'))}
+                  className={`rounded-full border px-4 py-1.5 text-sm font-medium transition ${
+                    detailChartMode === 'bars'
+                      ? 'border-slate-900 bg-slate-900 text-white'
+                      : 'border-slate-200 bg-white text-slate-600'
+                  }`}
+                >
+                  {detailChartMode === 'bars' ? 'Bars' : 'Lines'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCumulativeBars(!showCumulativeBars)}
+                  className={`rounded-full border px-4 py-1.5 text-sm font-medium transition ${
+                    showCumulativeBars
+                      ? 'border-slate-900 bg-slate-900 text-white'
+                      : 'border-slate-200 bg-white text-slate-600'
+                  }`}
+                >
+                  {showCumulativeBars ? 'Cumulative' : 'Selective'}
+                </button>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={280}>
+              {detailChartMode === 'bars' ? (
+                <BarChart data={barChartData} barCategoryGap="30%">
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis tickFormatter={(value) => formatNumber(value, 1)} />
+                  <Tooltip
+                    formatter={(value) => `€${formatAmount(value)}`}
+                    labelFormatter={(label, payload) => payload[0]?.payload?.fullName || label}
+                  />
+                  <Legend />
+                  <Bar dataKey="income" fill="#10b981" name="Income" />
+                  <Bar dataKey="expenses" fill="#ef4444" name="Expenses" />
+                </BarChart>
+              ) : (
+                <LineChart data={barChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis tickFormatter={(value) => formatNumber(value, 1)} />
+                  <Tooltip
+                    formatter={(value) => `€${formatAmount(value)}`}
+                    labelFormatter={(label, payload) => payload[0]?.payload?.fullName || label}
+                  />
+                  <Legend />
+                  <Line type="monotone" dataKey="income" stroke="#10b981" strokeWidth={2} name="Income" />
+                  <Line type="monotone" dataKey="expenses" stroke="#ef4444" strokeWidth={2} name="Expenses" />
+                </LineChart>
+              )}
+            </ResponsiveContainer>
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">

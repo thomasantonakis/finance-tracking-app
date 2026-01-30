@@ -2,10 +2,28 @@ import React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+const normalizeValue = (name) => {
+  const trimmed = name?.trim() || "";
+  return trimmed.toLowerCase();
+};
+
+const formatLabel = (name) => {
+  if (!name) return "";
+  return name
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+};
+
 function normalizeCategories(categories) {
-  return categories.map((cat) =>
-    typeof cat === "string" ? { name: cat, color: null } : cat
-  );
+  return categories.map((cat) => {
+    const rawName = typeof cat === "string" ? cat : cat.name;
+    return {
+      value: normalizeValue(rawName),
+      label: typeof cat === "object" && cat.label ? cat.label : formatLabel(rawName),
+      color: typeof cat === "object" ? cat.color : null,
+    };
+  });
 }
 
 export default function CategoryCombobox({
@@ -25,12 +43,12 @@ export default function CategoryCombobox({
 
   const filtered = React.useMemo(() => {
     if (!queryLower) return normalized;
-    return normalized.filter((cat) => cat.name.toLowerCase().includes(queryLower));
+    return normalized.filter((cat) => cat.label.toLowerCase().includes(queryLower));
   }, [normalized, queryLower]);
 
   const hasExactMatch = React.useMemo(() => {
     if (!queryLower) return false;
-    return normalized.some((cat) => cat.name.toLowerCase() === queryLower);
+    return normalized.some((cat) => cat.value === queryLower);
   }, [normalized, queryLower]);
 
   React.useEffect(() => {
@@ -44,10 +62,10 @@ export default function CategoryCombobox({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open]);
 
-  const handleSelect = (name) => {
-    onChange(name);
-    setOpen(false);
-  };
+    const handleSelect = (item) => {
+      onChange(item.label);
+      setOpen(false);
+    };
 
   return (
     <div className="space-y-2" ref={wrapperRef}>
@@ -71,9 +89,9 @@ export default function CategoryCombobox({
             )}
             {filtered.map((cat) => (
               <button
-                key={cat.name}
+                key={cat.label}
                 type="button"
-                onClick={() => handleSelect(cat.name)}
+                onClick={() => handleSelect(cat)}
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-100"
               >
                 {cat.color && (
@@ -82,7 +100,7 @@ export default function CategoryCombobox({
                     style={{ backgroundColor: cat.color }}
                   />
                 )}
-                <span className="capitalize">{cat.name}</span>
+                <span className="capitalize">{cat.label}</span>
               </button>
             ))}
             {!hasExactMatch && queryLower && (
