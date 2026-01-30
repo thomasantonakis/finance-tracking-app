@@ -31,8 +31,10 @@ export default function CategoryManager({ type }) {
   const [formData, setFormData] = useState({ name: '', color: colorOptions[0] });
   const [mergeDialog, setMergeDialog] = useState({ open: false, existingCategory: null, editingId: null });
   const [deleteDialog, setDeleteDialog] = useState({ open: false, category: null, target: '', query: '', showList: false });
+  const [removeUnusedDialog, setRemoveUnusedDialog] = useState({ open: false, categories: [] });
   const queryClient = useQueryClient();
   const deleteDropdownRef = useRef(null);
+  const createInputRef = useRef(null);
 
   const entityName = type === 'expense' ? 'ExpenseCategory' : 'IncomeCategory';
   const transactionEntity = type === 'expense' ? 'Expense' : 'Income';
@@ -225,6 +227,29 @@ export default function CategoryManager({ type }) {
     );
   };
 
+  const handleRemoveUnused = async () => {
+    const usedNames = new Set(transactions.map((t) => t.category));
+    const unusedCategories = categories.filter((c) => !usedNames.has(c.name));
+    if (unusedCategories.length === 0) {
+      toast.info('No unused categories found.');
+      return;
+    }
+    setRemoveUnusedDialog({ open: true, categories: unusedCategories });
+  };
+
+  const handleConfirmRemoveUnused = async () => {
+    const toRemove = removeUnusedDialog.categories || [];
+    if (toRemove.length === 0) {
+      setRemoveUnusedDialog({ open: false, categories: [] });
+      return;
+    }
+    for (const cat of toRemove) {
+      await deleteMutation.mutateAsync(cat);
+    }
+    setRemoveUnusedDialog({ open: false, categories: [] });
+    toast.success(`Removed ${toRemove.length} unused category(ies).`);
+  };
+
   const startEdit = (category) => {
     setEditing(category.id);
     setFormData({ name: category.name, color: category.color });
@@ -235,6 +260,15 @@ export default function CategoryManager({ type }) {
     setCreating(false);
     setFormData({ name: '', color: colorOptions[0] });
   };
+
+  useEffect(() => {
+    if (creating && createInputRef.current) {
+      setTimeout(() => {
+        createInputRef.current?.focus();
+        createInputRef.current?.select();
+      }, 0);
+    }
+  }, [creating]);
 
   useEffect(() => {
     if (!deleteDialog.showList) return;
@@ -257,6 +291,55 @@ export default function CategoryManager({ type }) {
 
   return (
     <div className="space-y-3">
+      {creating ? (
+        <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+          <Input
+            ref={createInputRef}
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            className="flex-1"
+            placeholder="Category name"
+          />
+          <div className="flex gap-2">
+            {colorOptions.map((color) => (
+              <button
+                key={color}
+                onClick={() => setFormData({ ...formData, color })}
+                className={`w-6 h-6 rounded-full ${formData.color === color ? 'ring-2 ring-offset-2 ring-slate-400' : ''}`}
+                style={{ backgroundColor: color }}
+              />
+            ))}
+          </div>
+          <Button size="icon" variant="ghost" onClick={handleCreate}>
+            <Check className="w-4 h-4 text-green-600" />
+          </Button>
+          <Button size="icon" variant="ghost" onClick={cancelEdit}>
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+      ) : (
+        <Button
+          onClick={() => {
+            setCreating(true);
+            setTimeout(() => {
+              createInputRef.current?.focus();
+              createInputRef.current?.select();
+            }, 0);
+          }}
+          variant="outline"
+          className="w-full"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Add {type === 'expense' ? 'Expense' : 'Income'} Category
+        </Button>
+      )}
+      <Button
+        variant="outline"
+        className="w-full"
+        onClick={handleRemoveUnused}
+      >
+        Remove Unused {type === 'expense' ? 'Expense' : 'Income'} Categories
+      </Button>
       {categories.map((category) => (
         <div key={category.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
           {editing === category.id ? (
@@ -306,41 +389,6 @@ export default function CategoryManager({ type }) {
         </div>
       ))}
 
-      {creating ? (
-        <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
-          <Input
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            className="flex-1"
-            placeholder="Category name"
-          />
-          <div className="flex gap-2">
-            {colorOptions.map((color) => (
-              <button
-                key={color}
-                onClick={() => setFormData({ ...formData, color })}
-                className={`w-6 h-6 rounded-full ${formData.color === color ? 'ring-2 ring-offset-2 ring-slate-400' : ''}`}
-                style={{ backgroundColor: color }}
-              />
-            ))}
-          </div>
-          <Button size="icon" variant="ghost" onClick={handleCreate}>
-            <Check className="w-4 h-4 text-green-600" />
-          </Button>
-          <Button size="icon" variant="ghost" onClick={cancelEdit}>
-            <X className="w-4 h-4" />
-          </Button>
-        </div>
-      ) : (
-        <Button
-          onClick={() => setCreating(true)}
-          variant="outline"
-          className="w-full"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add {type === 'expense' ? 'Expense' : 'Income'} Category
-        </Button>
-      )}
 
       <AlertDialog open={mergeDialog.open} onOpenChange={(open) => !open && setMergeDialog({ open: false, existingCategory: null, editingId: null })}>
         <AlertDialogContent>
@@ -464,6 +512,37 @@ export default function CategoryManager({ type }) {
               disabled={!deleteDialog.target}
             >
               Move & Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={removeUnusedDialog.open}
+        onOpenChange={(open) => !open && setRemoveUnusedDialog({ open: false, categories: [] })}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove unused categories?</AlertDialogTitle>
+            <AlertDialogDescription>
+              These categories have no transactions and will be deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="max-h-48 overflow-auto rounded-md border border-slate-200 p-3 text-sm text-slate-700">
+            <ul className="list-disc pl-5 space-y-1">
+              {[...removeUnusedDialog.categories]
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((cat) => (
+                <li key={cat.id}>{cat.name}</li>
+              ))}
+            </ul>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setRemoveUnusedDialog({ open: false, categories: [] })}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmRemoveUnused}>
+              Delete {removeUnusedDialog.categories.length} Categories
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
