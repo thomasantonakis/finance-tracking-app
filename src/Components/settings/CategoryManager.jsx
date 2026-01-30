@@ -1,17 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Plus, Edit, Trash2, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { formatAmount } from '@/utils';
 import { toast } from 'sonner';
 import {
@@ -37,8 +30,9 @@ export default function CategoryManager({ type }) {
   const [creating, setCreating] = useState(false);
   const [formData, setFormData] = useState({ name: '', color: colorOptions[0] });
   const [mergeDialog, setMergeDialog] = useState({ open: false, existingCategory: null, editingId: null });
-  const [deleteDialog, setDeleteDialog] = useState({ open: false, category: null, target: '' });
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, category: null, target: '', query: '', showList: false });
   const queryClient = useQueryClient();
+  const deleteDropdownRef = useRef(null);
 
   const entityName = type === 'expense' ? 'ExpenseCategory' : 'IncomeCategory';
   const transactionEntity = type === 'expense' ? 'Expense' : 'Income';
@@ -63,6 +57,19 @@ export default function CategoryManager({ type }) {
   const { data: transactions = [] } = useQuery({
     queryKey: [transactionEntity],
     queryFn: () => base44.entities[transactionEntity].list(),
+  });
+
+  const categoryTotals = categories.reduce((acc, cat) => {
+    acc[cat.name] = transactions
+      .filter((t) => t.category === cat.name)
+      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    return acc;
+  }, {});
+
+  const categoriesByTotal = [...categories].sort((a, b) => {
+    const totalDiff = (categoryTotals[b.name] || 0) - (categoryTotals[a.name] || 0);
+    if (totalDiff !== 0) return totalDiff;
+    return a.name.localeCompare(b.name);
   });
 
   const createMutation = useMutation({
@@ -189,7 +196,7 @@ export default function CategoryManager({ type }) {
       deleteMutation.mutate(category);
       return;
     }
-    setDeleteDialog({ open: true, category, target: '' });
+    setDeleteDialog({ open: true, category, target: '', query: '', showList: false });
   };
 
   const handleMoveAndDelete = async () => {
@@ -212,7 +219,7 @@ export default function CategoryManager({ type }) {
     queryClient.invalidateQueries({ queryKey: [transactionEntity] });
     queryClient.invalidateQueries({ queryKey: ['expenses'] });
     queryClient.invalidateQueries({ queryKey: ['income'] });
-    setDeleteDialog({ open: false, category: null, target: '' });
+    setDeleteDialog({ open: false, category: null, target: '', query: '', showList: false });
     toast.success(
       `Category deleted. ${transactionsToUpdate.length} transaction(s) moved (total ${formatAmount(totalAmount)}).`
     );
@@ -228,6 +235,17 @@ export default function CategoryManager({ type }) {
     setCreating(false);
     setFormData({ name: '', color: colorOptions[0] });
   };
+
+  useEffect(() => {
+    if (!deleteDialog.showList) return;
+    const handleClick = (event) => {
+      if (deleteDropdownRef.current && !deleteDropdownRef.current.contains(event.target)) {
+        setDeleteDialog((prev) => ({ ...prev, showList: false }));
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [deleteDialog.showList]);
 
   const deleteDialogTransactions = deleteDialog.category
     ? transactions.filter((t) => t.category === deleteDialog.category.name)
@@ -347,7 +365,7 @@ export default function CategoryManager({ type }) {
 
       <AlertDialog
         open={deleteDialog.open}
-        onOpenChange={(open) => !open && setDeleteDialog({ open: false, category: null, target: '' })}
+        onOpenChange={(open) => !open && setDeleteDialog({ open: false, category: null, target: '', query: '', showList: false })}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -365,25 +383,73 @@ export default function CategoryManager({ type }) {
           </div>
           <div className="space-y-2">
             <Label>Move transactions to</Label>
-            <Select
-              value={deleteDialog.target}
-              onValueChange={(value) => setDeleteDialog((prev) => ({ ...prev, target: value }))}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select category" />
-              </SelectTrigger>
-              <SelectContent>
-                {categories
+            <div className="relative" ref={deleteDropdownRef}>
+              <Input
+                value={deleteDialog.query}
+                onChange={(e) =>
+                  setDeleteDialog((prev) => ({ ...prev, query: e.target.value }))
+                }
+                onFocus={() => setDeleteDialog((prev) => ({ ...prev, showList: true }))}
+                placeholder="Type to filter categories"
+              />
+              {deleteDialog.query && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDeleteDialog((prev) => ({
+                      ...prev,
+                      query: '',
+                      target: '',
+                      showList: false,
+                    }))
+                  }
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600"
+                >
+                  Clear
+                </button>
+              )}
+              {deleteDialog.showList && (
+                <div className="absolute z-50 mt-1 w-full max-h-56 overflow-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg">
+                {categoriesByTotal
                   .filter((c) => c.id !== deleteDialog.category?.id)
                   .filter((c) => !RESERVED_CATEGORY_NAMES.has(c.name.toLowerCase()))
+                  .filter((c) =>
+                    c.name.toLowerCase().includes(deleteDialog.query.trim().toLowerCase())
+                  )
                   .map((c) => (
-                    <SelectItem key={c.id} value={c.name}>
-                      {c.name}
-                    </SelectItem>
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() =>
+                        setDeleteDialog((prev) => ({
+                          ...prev,
+                          target: c.name,
+                          query: c.name,
+                          showList: false,
+                        }))
+                      }
+                      className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-100 ${
+                        deleteDialog.target === c.name ? 'bg-slate-100' : ''
+                      }`}
+                    >
+                      <span className="capitalize">{c.name}</span>
+                      <span className="text-xs text-slate-400">
+                        {formatAmount(categoryTotals[c.name] || 0)}
+                      </span>
+                    </button>
                   ))}
-              </SelectContent>
-            </Select>
-            {categories.filter((c) => c.id !== deleteDialog.category?.id).length === 0 && (
+                {categoriesByTotal
+                  .filter((c) => c.id !== deleteDialog.category?.id)
+                  .filter((c) => !RESERVED_CATEGORY_NAMES.has(c.name.toLowerCase()))
+                  .filter((c) =>
+                    c.name.toLowerCase().includes(deleteDialog.query.trim().toLowerCase())
+                  ).length === 0 && (
+                  <div className="px-3 py-2 text-sm text-slate-400">No categories found</div>
+                )}
+                </div>
+              )}
+            </div>
+            {categoriesByTotal.filter((c) => c.id !== deleteDialog.category?.id).length === 0 && (
               <p className="text-xs text-slate-500">
                 Create another category first, then move transactions.
               </p>
