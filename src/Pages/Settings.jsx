@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { motion } from 'framer-motion';
-import { Download, Upload, LogOut, Palette, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Download, Upload, LogOut, Palette, Trash2, ChevronDown, ChevronRight, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import CategoryManager from '../Components/settings/CategoryManager';
@@ -18,7 +19,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ensureStartingBalanceTransactions, getNumberFormat, setNumberFormat } from '@/utils';
+import { ensureStartingBalanceTransactions, formatAmount, getNumberFormat, setNumberFormat } from '@/utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 
 const defaultColors = [
   '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#22c55e', '#10b981',
@@ -30,6 +33,7 @@ export default function Settings() {
   const [showCustomize, setShowCustomize] = useState(false);
   const [showExpenseCategories, setShowExpenseCategories] = useState(false);
   const [showIncomeCategories, setShowIncomeCategories] = useState(false);
+  const [showBulkUpdater, setShowBulkUpdater] = useState(false);
   const [numberFormat, setNumberFormatState] = useState(getNumberFormat());
   const [importing, setImporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -44,6 +48,38 @@ export default function Settings() {
     description: '',
     confirmLabel: 'Confirm',
     onConfirm: null,
+  });
+  const [bulkFilters, setBulkFilters] = useState({
+    type: 'all',
+    dateFrom: '',
+    dateTo: '',
+    amountMin: '',
+    amountMax: '',
+    cleared: 'any',
+    projected: 'any',
+    text: {
+      category: { op: 'contains', value: '' },
+      subcategory: { op: 'contains', value: '' },
+      notes: { op: 'contains', value: '' },
+    },
+  });
+  const [bulkAction, setBulkAction] = useState({
+    type: 'delete',
+    textMode: 'append',
+    targetField: 'notes',
+    sourceField: 'custom',
+    customText: '',
+    booleanField: 'cleared',
+    booleanValue: 'true',
+  });
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [bulkConfirm, setBulkConfirm] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(0);
+  const [bulkResult, setBulkResult] = useState({
+    open: false,
+    inProgress: false,
+    successCount: 0,
+    failCount: 0,
   });
   const queryClient = useQueryClient();
 
@@ -92,6 +128,127 @@ export default function Settings() {
     queryKey: ['IncomeCategory'],
     queryFn: () => base44.entities.IncomeCategory.list(),
   });
+
+  const allTransactions = useMemo(() => {
+    const expenseTx = expenses.map((e) => ({ ...e, type: 'expense' }));
+    const incomeTx = income.map((i) => ({ ...i, type: 'income' }));
+    return [...expenseTx, ...incomeTx];
+  }, [expenses, income]);
+
+  const reservedCategoryNames = useMemo(
+    () => new Set(['starting balance', 'system - starting balance']),
+    []
+  );
+
+  const categoryTotals = useMemo(() => {
+    const totals = {};
+    allTransactions.forEach((t) => {
+      if (!t.category) return;
+      const key = t.category;
+      if (reservedCategoryNames.has(key.toLowerCase())) return;
+      totals[key] = (totals[key] || 0) + (Number(t.amount) || 0);
+    });
+    return totals;
+  }, [allTransactions, reservedCategoryNames]);
+
+  const categoryOptions = useMemo(() => {
+    const names = new Set();
+    existingExpenseCategories.forEach((c) => names.add(c.name));
+    existingIncomeCategories.forEach((c) => names.add(c.name));
+    allTransactions.forEach((t) => t.category && names.add(t.category));
+    const list = Array.from(names).filter(
+      (name) => !reservedCategoryNames.has(name.toLowerCase())
+    );
+    return list.sort((a, b) => {
+      const diff = (categoryTotals[b] || 0) - (categoryTotals[a] || 0);
+      if (diff !== 0) return diff;
+      return a.localeCompare(b);
+    });
+  }, [existingExpenseCategories, existingIncomeCategories, allTransactions, categoryTotals, reservedCategoryNames]);
+
+  const matchesText = (value, filter) => {
+    if (!filter?.value) return true;
+    const target = (value || '').toString().toLowerCase();
+    const query = filter.value.toLowerCase();
+    if (!query) return true;
+    if (filter.op === 'starts') return target.startsWith(query);
+    if (filter.op === 'ends') return target.endsWith(query);
+    return target.includes(query);
+  };
+
+  const filteredTransactions = useMemo(() => {
+    return allTransactions.filter((t) => {
+      if (reservedCategoryNames.has((t.category || '').toLowerCase())) return false;
+
+      if (bulkFilters.type !== 'all' && t.type !== bulkFilters.type) return false;
+      if (bulkFilters.dateFrom) {
+        if (new Date(t.date) < new Date(bulkFilters.dateFrom)) return false;
+      }
+      if (bulkFilters.dateTo) {
+        if (new Date(t.date) > new Date(bulkFilters.dateTo)) return false;
+      }
+      if (bulkFilters.amountMin !== '') {
+        if ((Number(t.amount) || 0) < Number(bulkFilters.amountMin)) return false;
+      }
+      if (bulkFilters.amountMax !== '') {
+        if ((Number(t.amount) || 0) > Number(bulkFilters.amountMax)) return false;
+      }
+      if (bulkFilters.cleared !== 'any') {
+        const clearedVal = bulkFilters.cleared === 'true';
+        if (t.cleared !== clearedVal) return false;
+      }
+      if (bulkFilters.projected !== 'any') {
+        const projectedVal = bulkFilters.projected === 'true';
+        if (t.projected !== projectedVal) return false;
+      }
+      if (!matchesText(t.category, bulkFilters.text.category)) return false;
+      if (!matchesText(t.subcategory, bulkFilters.text.subcategory)) return false;
+      if (!matchesText(t.notes, bulkFilters.text.notes)) return false;
+      return true;
+    });
+  }, [allTransactions, bulkFilters, reservedCategoryNames]);
+
+  const bulkSummary = useMemo(() => {
+    const parts = [];
+    if (bulkFilters.type !== 'all') parts.push(`Type: ${bulkFilters.type}`);
+    if (bulkFilters.dateFrom || bulkFilters.dateTo) {
+      parts.push(
+        `Date: ${bulkFilters.dateFrom || '…'} → ${bulkFilters.dateTo || '…'}`
+      );
+    }
+    if (bulkFilters.amountMin !== '' || bulkFilters.amountMax !== '') {
+      parts.push(
+        `Amount: ${bulkFilters.amountMin || '…'} → ${bulkFilters.amountMax || '…'}`
+      );
+    }
+    if (bulkFilters.cleared !== 'any') parts.push(`Cleared: ${bulkFilters.cleared}`);
+    if (bulkFilters.projected !== 'any') parts.push(`Projected: ${bulkFilters.projected}`);
+    ['category', 'subcategory', 'notes'].forEach((field) => {
+      const rule = bulkFilters.text[field];
+      if (rule?.value) {
+        parts.push(`${field} ${rule.op} "${rule.value}"`);
+      }
+    });
+    return parts.length ? parts : ['No filters (all transactions)'];
+  }, [bulkFilters]);
+
+  const bulkActionSummary = useMemo(() => {
+    if (bulkAction.type === 'delete') return 'Delete matched transactions';
+    if (bulkAction.type === 'boolean') {
+      return `Set ${bulkAction.booleanField} to ${bulkAction.booleanValue}`;
+    }
+    const source =
+      bulkAction.sourceField === 'custom'
+        ? `custom text "${bulkAction.customText}"`
+        : bulkAction.sourceField;
+    return `${bulkAction.textMode} ${source} to ${bulkAction.targetField}`;
+  }, [bulkAction]);
+
+  const previewTransactions = useMemo(
+    () =>
+      [...filteredTransactions].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 8),
+    [filteredTransactions]
+  );
 
   useEffect(() => {
     const initializeCategories = async () => {
@@ -620,6 +777,72 @@ export default function Settings() {
     }
   };
 
+  const getEntityForType = (type) => {
+    if (type === 'expense') return base44.entities.Expense;
+    return base44.entities.Income;
+  };
+
+  const handleApplyBulkAction = async () => {
+    if (filteredTransactions.length === 0) {
+      toast.info('No transactions match the current filters.');
+      return;
+    }
+    setBulkProcessing(true);
+    setBulkProgress(0);
+    setBulkResult({
+      open: true,
+      inProgress: true,
+      successCount: 0,
+      failCount: 0,
+    });
+    try {
+      let successCount = 0;
+      let failCount = 0;
+      const total = filteredTransactions.length;
+      for (const tx of filteredTransactions) {
+        const entity = getEntityForType(tx.type);
+        try {
+          if (bulkAction.type === 'delete') {
+            await entity.delete(tx.id);
+          } else if (bulkAction.type === 'text') {
+            const targetField = bulkAction.targetField;
+            const sourceValue =
+              bulkAction.sourceField === 'custom'
+                ? bulkAction.customText
+                : tx[bulkAction.sourceField] || '';
+            const existing = tx[targetField] || '';
+            const newValue =
+              bulkAction.textMode === 'append'
+                ? existing
+                  ? `${existing}${existing.endsWith(' ') ? '' : ' '}${sourceValue}`
+                  : sourceValue
+                : sourceValue;
+            await entity.update(tx.id, { [targetField]: newValue });
+          } else if (bulkAction.type === 'boolean') {
+            const value = bulkAction.booleanValue === 'true';
+            await entity.update(tx.id, { [bulkAction.booleanField]: value });
+          }
+          successCount += 1;
+        } catch (error) {
+          failCount += 1;
+        }
+        const processed = successCount + failCount;
+        setBulkProgress(Math.round((processed / total) * 100));
+        setBulkResult((prev) => ({
+          ...prev,
+          successCount,
+          failCount,
+        }));
+      }
+      queryClient.invalidateQueries();
+      setBulkResult((prev) => ({ ...prev, inProgress: false }));
+    } catch (error) {
+      setBulkResult((prev) => ({ ...prev, inProgress: false }));
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
   const handleLogout = () => {
     base44.auth.logout();
   };
@@ -719,6 +942,383 @@ export default function Settings() {
           </div>
         </AlertDialogContent>
       </AlertDialog>
+      <Dialog open={showBulkUpdater} onOpenChange={setShowBulkUpdater}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Bulk Update Transactions</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5 max-h-[70vh] overflow-auto pr-1">
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-slate-900">Filters (AND)</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="md:col-span-2">
+                  <Label>Type</Label>
+                  <Select
+                    value={bulkFilters.type}
+                    onValueChange={(value) => setBulkFilters((prev) => ({ ...prev, type: value }))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="expense">Expense</SelectItem>
+                      <SelectItem value="income">Income</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Date range</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      type="date"
+                      value={bulkFilters.dateFrom}
+                      onChange={(e) => setBulkFilters((prev) => ({ ...prev, dateFrom: e.target.value }))}
+                    />
+                    <Input
+                      type="date"
+                      value={bulkFilters.dateTo}
+                      onChange={(e) => setBulkFilters((prev) => ({ ...prev, dateTo: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Amount range</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      type="number"
+                      value={bulkFilters.amountMin}
+                      onChange={(e) => setBulkFilters((prev) => ({ ...prev, amountMin: e.target.value }))}
+                    />
+                    <Input
+                      type="number"
+                      value={bulkFilters.amountMax}
+                      onChange={(e) => setBulkFilters((prev) => ({ ...prev, amountMax: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label>Cleared</Label>
+                  <Select
+                    value={bulkFilters.cleared}
+                    onValueChange={(value) => setBulkFilters((prev) => ({ ...prev, cleared: value }))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">Any</SelectItem>
+                      <SelectItem value="true">True</SelectItem>
+                      <SelectItem value="false">False</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Projected</Label>
+                  <Select
+                    value={bulkFilters.projected}
+                    onValueChange={(value) => setBulkFilters((prev) => ({ ...prev, projected: value }))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">Any</SelectItem>
+                      <SelectItem value="true">True</SelectItem>
+                      <SelectItem value="false">False</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {['category', 'subcategory', 'notes'].map((field) => (
+                  <div key={field} className="space-y-1">
+                    <Label className="capitalize">{field} match</Label>
+                    <Select
+                      value={bulkFilters.text[field].op}
+                      onValueChange={(value) =>
+                        setBulkFilters((prev) => ({
+                          ...prev,
+                          text: { ...prev.text, [field]: { ...prev.text[field], op: value } },
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="contains">Contains</SelectItem>
+                        <SelectItem value="starts">Starts with</SelectItem>
+                        <SelectItem value="ends">Ends with</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      value={bulkFilters.text[field].value}
+                      onChange={(e) =>
+                        setBulkFilters((prev) => ({
+                          ...prev,
+                          text: { ...prev.text, [field]: { ...prev.text[field], value: e.target.value } },
+                        }))
+                      }
+                      placeholder={`Filter ${field}`}
+                    />
+                  </div>
+                ))}
+              </div>
+
+            </div>
+
+            <div className="border-t border-slate-200 pt-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-900">Matched</h3>
+                <span className="text-sm text-slate-500">{filteredTransactions.length} transaction(s)</span>
+              </div>
+              <div className="max-h-40 overflow-auto rounded-md border border-slate-200 p-2">
+                {previewTransactions.length === 0 ? (
+                  <p className="text-xs text-slate-400">No transactions match these filters.</p>
+                ) : (
+                  previewTransactions.map((tx) => (
+                    <div key={tx.id} className="flex items-center justify-between text-xs py-1">
+                      <div className="text-slate-600">
+                        {format(new Date(tx.date), 'yyyy-MM-dd')} • {tx.type} • {tx.category || '—'}
+                        {tx.subcategory ? ` / ${tx.subcategory}` : ''} {tx.notes ? `• ${tx.notes}` : ''}
+                      </div>
+                      <div className="tabular-nums text-slate-700">€{formatAmount(tx.amount)}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="border-t border-slate-200 pt-4 space-y-3">
+              <h3 className="text-sm font-semibold text-slate-900">Action</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <Label>Action type</Label>
+                  <Select
+                    value={bulkAction.type}
+                    onValueChange={(value) => setBulkAction((prev) => ({ ...prev, type: value }))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="delete">Delete</SelectItem>
+                      <SelectItem value="text">Update text field</SelectItem>
+                      <SelectItem value="boolean">Set boolean</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {bulkAction.type === 'text' && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <Label>Target field</Label>
+                    <Select
+                      value={bulkAction.targetField}
+                      onValueChange={(value) => setBulkAction((prev) => ({ ...prev, targetField: value }))}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="notes">Notes</SelectItem>
+                        <SelectItem value="category">Category</SelectItem>
+                        <SelectItem value="subcategory">Subcategory</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Mode</Label>
+                    <Select
+                      value={bulkAction.textMode}
+                      onValueChange={(value) => setBulkAction((prev) => ({ ...prev, textMode: value }))}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="append">Append</SelectItem>
+                        <SelectItem value="overwrite">Overwrite</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Source</Label>
+                    <Select
+                      value={bulkAction.sourceField}
+                      onValueChange={(value) => setBulkAction((prev) => ({ ...prev, sourceField: value }))}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="custom">Custom text</SelectItem>
+                        <SelectItem value="category">Category</SelectItem>
+                        <SelectItem value="subcategory">Subcategory</SelectItem>
+                        <SelectItem value="notes">Notes</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {bulkAction.sourceField === 'custom' && (
+                    <div className="md:col-span-3">
+                      <Label>Custom Text</Label>
+                      <Input
+                        value={bulkAction.customText}
+                        onChange={(e) => setBulkAction((prev) => ({ ...prev, customText: e.target.value }))}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {bulkAction.type === 'boolean' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <Label>Field</Label>
+                    <Select
+                      value={bulkAction.booleanField}
+                      onValueChange={(value) => setBulkAction((prev) => ({ ...prev, booleanField: value }))}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cleared">Cleared</SelectItem>
+                        <SelectItem value="projected">Projected</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Set value</Label>
+                    <Select
+                      value={bulkAction.booleanValue}
+                      onValueChange={(value) => setBulkAction((prev) => ({ ...prev, booleanValue: value }))}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="true">True</SelectItem>
+                        <SelectItem value="false">False</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setShowBulkUpdater(false)} disabled={bulkProcessing}>
+                Cancel
+              </Button>
+              <Button
+                className="!bg-slate-900 !text-white !border-slate-900 hover:!bg-slate-800"
+                onClick={() => setBulkConfirm(true)}
+                disabled={bulkProcessing}
+              >
+                {bulkProcessing ? 'Applying...' : 'Review'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={bulkConfirm} onOpenChange={setBulkConfirm}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Confirm Bulk Update</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <h4 className="text-sm font-semibold text-slate-900 mb-1">Filters</h4>
+              <ul className="list-disc pl-5 text-sm text-slate-600 space-y-1">
+                {bulkSummary.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-slate-900 mb-1">Action</h4>
+              <p className="text-sm text-slate-600">{bulkActionSummary}</p>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-slate-900 mb-1">Matched</h4>
+              <p className="text-sm text-slate-600">
+                {filteredTransactions.length} transaction(s) will be affected.
+              </p>
+              <div className="mt-2 max-h-40 overflow-auto rounded-md border border-slate-200 p-2">
+                {previewTransactions.length === 0 ? (
+                  <p className="text-xs text-slate-400">No transactions match these filters.</p>
+                ) : (
+                  previewTransactions.map((tx) => (
+                    <div key={tx.id} className="flex items-center justify-between text-xs py-1">
+                      <div className="text-slate-600">
+                        {format(new Date(tx.date), 'yyyy-MM-dd')} • {tx.type} • {tx.category || '—'}
+                        {tx.subcategory ? ` / ${tx.subcategory}` : ''} {tx.notes ? `• ${tx.notes}` : ''}
+                      </div>
+                      <div className="tabular-nums text-slate-700">€{formatAmount(tx.amount)}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setBulkConfirm(false)} disabled={bulkProcessing}>
+                Cancel
+              </Button>
+              <Button
+                className="!bg-slate-900 !text-white !border-slate-900 hover:!bg-slate-800"
+                onClick={() => {
+                  handleApplyBulkAction();
+                }}
+                disabled={bulkProcessing}
+              >
+                {bulkProcessing ? 'Applying...' : 'Confirm'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={bulkResult.open} onOpenChange={(open) => !open && setBulkResult((prev) => ({ ...prev, open } ))}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Bulk Update Result</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm text-slate-600">
+                {bulkResult.inProgress ? 'Applying changes...' : 'Update finished.'}
+              </p>
+              <div className="mt-2">
+                <Progress value={bulkProgress} className="h-3" />
+                <p className="text-xs text-slate-500 mt-1 text-center">{bulkProgress}%</p>
+              </div>
+            </div>
+            <div className="text-sm text-slate-700">
+              <p>Successful: {bulkResult.successCount}</p>
+              <p>Failed: {bulkResult.failCount}</p>
+              <p>Total: {bulkResult.successCount + bulkResult.failCount}</p>
+            </div>
+            {!bulkResult.inProgress && (
+              <div className="flex justify-end">
+                <Button
+                  className="!bg-slate-900 !text-white !border-slate-900 hover:!bg-slate-800"
+                  onClick={() => {
+                    setBulkResult({ open: false, inProgress: false, successCount: 0, failCount: 0 });
+                    setBulkConfirm(false);
+                    setShowBulkUpdater(false);
+                    setBulkProgress(0);
+                  }}
+                >
+                  OK
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
       <div className="max-w-7xl mx-auto px-4 py-6">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -802,6 +1402,18 @@ export default function Settings() {
                     </div>
                   </div>
                 )}
+                <button
+                  onClick={() => setShowBulkUpdater(true)}
+                  className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="p-2 rounded-lg bg-slate-100">
+                    <SlidersHorizontal className="w-5 h-5 text-slate-700" />
+                  </div>
+                  <div className="flex-1 text-left">
+                    <p className="font-medium text-slate-900">Bulk Update Transactions</p>
+                    <p className="text-sm text-slate-500">Filter and apply changes to multiple transactions</p>
+                  </div>
+                </button>
               </div>
             </div>
 
