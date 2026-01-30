@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { ensureStartingBalanceTransactions, formatAmount, formatNumber, useSessionState } from '@/utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 export default function Charts() {
   const [currentDate, setCurrentDate] = useSessionState('charts.currentDate', () => new Date());
@@ -19,6 +20,9 @@ export default function Charts() {
   const [showProjected, setShowProjected] = useState(true);
   const [showCumulativeBars, setShowCumulativeBars] = useState(false);
   const [detailChartMode, setDetailChartMode] = useState('bars');
+  const [pieModal, setPieModal] = useState({ open: false, type: 'expense' });
+  const [expandedCategory, setExpandedCategory] = useState(null);
+  const [expandedSubcategory, setExpandedSubcategory] = useState(null);
   const queryClient = useQueryClient();
 
   const { data: expenses = [] } = useQuery({
@@ -214,7 +218,8 @@ export default function Charts() {
     });
     return Object.entries(categoryTotals)
       .map(([name, value]) => ({ 
-        name: name.charAt(0).toUpperCase() + name.slice(1), 
+        name: name.charAt(0).toUpperCase() + name.slice(1),
+        rawName: name,
         value,
         color: getCategoryColor(name, 'expense')
       }))
@@ -228,7 +233,8 @@ export default function Charts() {
     });
     return Object.entries(categoryTotals)
       .map(([name, value]) => ({ 
-        name: name.charAt(0).toUpperCase() + name.slice(1), 
+        name: name.charAt(0).toUpperCase() + name.slice(1),
+        rawName: name,
         value,
         color: getCategoryColor(name, 'income')
       }))
@@ -237,6 +243,32 @@ export default function Charts() {
 
   const totalExpenses = expensesInPeriod.reduce((sum, e) => sum + e.amount, 0);
   const totalIncome = incomeInPeriod.reduce((sum, i) => sum + i.amount, 0);
+
+  const pieCategories = pieModal.type === 'expense' ? expensePieData : incomePieData;
+  const pieTotal = pieModal.type === 'expense' ? totalExpenses : totalIncome;
+  const pieTransactions = pieModal.type === 'expense' ? expensesInPeriod : incomeInPeriod;
+  const selectedCategoryTransactions = expandedCategory
+    ? pieTransactions.filter(
+        (t) => (t.category || '').toLowerCase() === expandedCategory.toLowerCase()
+      )
+    : [];
+
+  const subcategoryGroups = useMemo(() => {
+    if (!expandedCategory) return [];
+    const groups = {};
+    selectedCategoryTransactions.forEach((t) => {
+      const key = t.subcategory || 'Uncategorized';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(t);
+    });
+    return Object.entries(groups)
+      .map(([name, items]) => ({
+        name,
+        total: items.reduce((sum, t) => sum + (Number(t.amount) || 0), 0),
+        items: items.sort((a, b) => new Date(b.date) - new Date(a.date)),
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [expandedCategory, selectedCategoryTransactions]);
 
   const navigatePeriod = (direction) => {
     if (viewMode === 'days') {
@@ -426,6 +458,11 @@ export default function Charts() {
                       label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                       startAngle={90}
                       endAngle={-270}
+                      onClick={() => {
+                        setPieModal({ open: true, type: 'expense' });
+                        setExpandedCategory(null);
+                        setExpandedSubcategory(null);
+                      }}
                     >
                       {expensePieData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
@@ -459,6 +496,11 @@ export default function Charts() {
                       label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                       startAngle={90}
                       endAngle={-270}
+                      onClick={() => {
+                        setPieModal({ open: true, type: 'income' });
+                        setExpandedCategory(null);
+                        setExpandedSubcategory(null);
+                      }}
                     >
                       {incomePieData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
@@ -474,6 +516,134 @@ export default function Charts() {
           </div>
         </motion.div>
       </div>
+      <Dialog open={pieModal.open} onOpenChange={(open) => !open && setPieModal({ open: false, type: pieModal.type })}>
+        <DialogContent className="max-w-4xl p-0 overflow-hidden">
+          <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 text-white p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-wide text-slate-300">
+                  {pieModal.type === 'expense' ? 'Expenses' : 'Income'}
+                </div>
+                <DialogTitle className="text-xl font-semibold text-white">
+                  {viewMode === 'days' ? format(currentDate, 'MMMM yyyy') : format(currentDate, 'yyyy')}
+                </DialogTitle>
+              </div>
+              <div className="text-right">
+                <div className="text-sm text-slate-300">Total</div>
+                <div className="text-lg font-bold tabular-nums">
+                  €{formatAmount(pieTotal || 0)}
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 flex items-center gap-3 text-xs text-slate-300">
+              <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 ${
+                pieModal.type === 'expense' ? 'bg-red-500/20 text-red-200' : 'bg-green-500/20 text-green-200'
+              }`}>
+                {pieModal.type === 'expense' ? 'Expense' : 'Income'}
+              </span>
+              <span className="rounded-full bg-white/10 px-3 py-1">
+                {pieTransactions.length} transaction(s)
+              </span>
+              {expandedCategory && (
+                <span className="rounded-full bg-white/10 px-3 py-1 capitalize">
+                  {expandedCategory}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="max-h-[70vh] overflow-auto p-5 space-y-4 bg-slate-50">
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="grid grid-cols-[1.6fr_0.7fr_0.6fr_1fr] gap-3 px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <div>Category</div>
+                <div className="text-right">Amount</div>
+                <div className="text-right">% Total</div>
+                <div>Share</div>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {pieCategories.map((cat) => {
+                  const percent = pieTotal ? (cat.value / pieTotal) * 100 : 0;
+                  const isExpanded = expandedCategory === cat.rawName;
+                  return (
+                    <div key={cat.name}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setExpandedCategory(isExpanded ? null : cat.rawName);
+                          setExpandedSubcategory(null);
+                        }}
+                        className={`w-full grid grid-cols-[1.6fr_0.7fr_0.6fr_1fr] gap-3 px-4 py-2 text-left text-sm ${
+                          isExpanded ? 'bg-slate-50' : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
+                          <span className="font-medium text-slate-900 capitalize">{cat.name}</span>
+                        </div>
+                        <div className="text-right font-semibold text-slate-900 tabular-nums">
+                          €{formatAmount(cat.value)}
+                        </div>
+                        <div className="text-right text-slate-500 tabular-nums">
+                          {percent.toFixed(1)}%
+                        </div>
+                        <div className="flex items-center">
+                          <div className="h-2 w-full rounded-full bg-slate-200">
+                            <div
+                              className="h-2 rounded-full"
+                              style={{ width: `${percent}%`, backgroundColor: cat.color }}
+                            />
+                          </div>
+                        </div>
+                      </button>
+                      {isExpanded && (
+                        <div className="bg-white px-4 pb-3">
+                          {subcategoryGroups.length === 0 ? (
+                            <p className="text-sm text-slate-400">No transactions.</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {subcategoryGroups.map((group) => {
+                                const isSubExpanded = expandedSubcategory === group.name;
+                                return (
+                                  <div key={group.name} className="rounded-lg border border-slate-200">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setExpandedSubcategory(isSubExpanded ? null : group.name)
+                                      }
+                                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
+                                    >
+                                      <span className="font-semibold text-slate-900">{group.name}</span>
+                                      <span className="text-sm font-bold text-slate-900 tabular-nums">
+                                        €{formatAmount(group.total)}
+                                      </span>
+                                    </button>
+                                    {isSubExpanded && (
+                                      <div className="px-3 pb-2 space-y-1">
+                                        {group.items.map((t) => (
+                                          <div key={t.id} className="flex items-center justify-between text-sm text-slate-600">
+                                            <div>
+                                              {format(new Date(t.date), 'EEE, MMM d, yyyy')}
+                                              {t.notes ? ` • ${t.notes}` : ''}
+                                            </div>
+                                            <div className="tabular-nums">€{formatAmount(t.amount)}</div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
