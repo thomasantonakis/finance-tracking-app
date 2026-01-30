@@ -75,10 +75,25 @@ export default function CategoryManager({ type }) {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id) => base44.entities[entityName].delete(id),
+    mutationFn: async (id) => {
+      const cat = categories.find((c) => c.id === id);
+      if (!cat) throw new Error('Category not found');
+      const inUse = transactions.some((t) => t.category === cat.name);
+      if (inUse) {
+        throw new Error('Category in use');
+      }
+      return base44.entities[entityName].delete(id);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [entityName] });
       toast.success('Category deleted');
+    },
+    onError: (error) => {
+      if (error.message === 'Category in use') {
+        toast.error('Cannot delete a category that has transactions.');
+      } else {
+        toast.error('Failed to delete category');
+      }
     },
   });
 

@@ -25,6 +25,8 @@ export default function Settings() {
   const [deleteProgress, setDeleteProgress] = useState(0);
   const [importProgress, setImportProgress] = useState(0);
   const [importLogs, setImportLogs] = useState([]);
+  const [deleteAccountsReport, setDeleteAccountsReport] = useState({ deleted: [], skipped: [] });
+  const [showDeleteAccountsReport, setShowDeleteAccountsReport] = useState(false);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -244,6 +246,61 @@ export default function Settings() {
       toast.error('Failed to delete data');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleDeleteAllAccounts = async () => {
+    const confirmed = window.confirm(
+      '⚠️ WARNING: This will permanently delete ALL accounts.\n\n' +
+      'This action CANNOT be undone.\n\n' +
+      'Are you absolutely sure you want to continue?'
+    );
+    if (!confirmed) return;
+
+    setDeleting(true);
+    setDeleteProgress(0);
+    setDeleteAccountsReport({ deleted: [], skipped: [] });
+    setShowDeleteAccountsReport(false);
+
+    try {
+      const expensesToCheck = await base44.entities.Expense.list();
+      const incomeToCheck = await base44.entities.Income.list();
+      const transfersToCheck = await base44.entities.Transfer.list();
+      const accountsToDelete = await base44.entities.Account.list();
+      const total = accountsToDelete.length || 1;
+      let deleted = 0;
+      const deletedNames = [];
+      const skippedNames = [];
+
+      for (const acc of accountsToDelete) {
+        const hasExpense = expensesToCheck.some((e) => e.account_id === acc.id);
+        const hasIncome = incomeToCheck.some((i) => i.account_id === acc.id);
+        const hasTransfer = transfersToCheck.some(
+          (t) => t.from_account_id === acc.id || t.to_account_id === acc.id
+        );
+
+        if (hasExpense || hasIncome || hasTransfer) {
+          skippedNames.push(acc.name);
+        } else {
+          await base44.entities.Account.delete(acc.id);
+          deletedNames.push(acc.name);
+        }
+        deleted++;
+        setDeleteProgress(Math.round((deleted / total) * 100));
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      setDeleteAccountsReport({
+        deleted: deletedNames.sort((a, b) => a.localeCompare(b)),
+        skipped: skippedNames.sort((a, b) => a.localeCompare(b)),
+      });
+      setShowDeleteAccountsReport(true);
+      toast.success('Account deletion completed');
+    } catch (error) {
+      toast.error('Failed to delete accounts');
+    } finally {
+      setDeleting(false);
+      setDeleteProgress(0);
     }
   };
 
@@ -490,6 +547,48 @@ export default function Settings() {
           </div>
         </div>
       )}
+      {showDeleteAccountsReport && (deleteAccountsReport.deleted.length > 0 || deleteAccountsReport.skipped.length > 0) && (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center">
+          <div className="bg-white rounded-2xl p-6 max-w-lg w-full mx-4">
+            <h3 className="font-bold text-lg mb-4">Account Deletion Report</h3>
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-sm font-semibold text-slate-700 mb-2">
+                  ✅ Deleted ({deleteAccountsReport.deleted.length})
+                </h4>
+                <ul className="list-disc pl-5 text-sm text-slate-700 space-y-1">
+                  {deleteAccountsReport.deleted.length === 0 ? (
+                    <li>None</li>
+                  ) : (
+                    deleteAccountsReport.deleted.map((name) => (
+                      <li key={`deleted-${name}`}>{name}</li>
+                    ))
+                  )}
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-slate-700 mb-2">
+                  ⚠️ Skipped ({deleteAccountsReport.skipped.length})
+                </h4>
+                <ul className="list-disc pl-5 text-sm text-slate-700 space-y-1">
+                  {deleteAccountsReport.skipped.length === 0 ? (
+                    <li>None</li>
+                  ) : (
+                    deleteAccountsReport.skipped.map((name) => (
+                      <li key={`skipped-${name}`}>{name}</li>
+                    ))
+                  )}
+                </ul>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <Button variant="outline" onClick={() => setShowDeleteAccountsReport(false)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="max-w-7xl mx-auto px-4 py-6">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -618,6 +717,7 @@ export default function Settings() {
                   </div>
                 )}
 
+
                 <button
                   onClick={handleDeleteAllData}
                   className="w-full flex items-center gap-3 p-4 hover:bg-red-50 transition-colors text-left"
@@ -629,6 +729,20 @@ export default function Settings() {
                   <div className="flex-1">
                     <p className="font-medium text-red-900">Delete All Data</p>
                     <p className="text-sm text-red-600">Permanently remove all transactions</p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={handleDeleteAllAccounts}
+                  className="w-full flex items-center gap-3 p-4 hover:bg-red-50 transition-colors text-left"
+                  disabled={isProcessing}
+                >
+                  <div className="p-2 rounded-lg bg-red-50">
+                    <Trash2 className="w-5 h-5 text-red-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-red-900">Delete All Accounts</p>
+                    <p className="text-sm text-red-600">Permanently remove all accounts</p>
                   </div>
                 </button>
               </div>
