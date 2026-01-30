@@ -43,10 +43,14 @@ export default function CalendarGrid({
   };
 
   const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const isWeekend = (day) => {
+    const idx = day.getDay();
+    return idx === 0 || idx === 6;
+  };
 
   return (
     <div className="bg-white rounded-xl p-2 border border-slate-200">
-      <div className="grid grid-cols-7 gap-0.5 mb-1">
+      <div className="grid grid-cols-7 gap-1 mb-1">
         {dayLabels.map((day) => (
           <div key={day} className="text-center text-[10px] text-slate-500 font-medium py-0.5">
             {day}
@@ -54,13 +58,14 @@ export default function CalendarGrid({
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-0.5">
+      <div className="grid grid-cols-7 gap-1">
         {displayDays.map((day, index) => {
           const { expenses: dayExpenses, income: dayIncome, transfers: dayTransfers } = getDayData(day);
           const isCurrentMonth = isSameMonth(day, currentDate);
           const isSelected = selectedDate && isSameDay(day, selectedDate);
           const isTodayDay = isToday(day);
           const hasData = dayExpenses > 0 || dayIncome > 0 || dayTransfers > 0;
+          const weekend = isWeekend(day);
 
           return (
             <motion.button
@@ -70,11 +75,13 @@ export default function CalendarGrid({
               transition={{ delay: index * 0.01 }}
               onClick={() => onSelectDate(day)}
               onDoubleClick={() => onDoubleClick && onDoubleClick(day)}
-              className={`relative aspect-square rounded-md p-0.5 transition-all border ${
+              className={`relative h-20 rounded-md p-1 transition-all border ${
                 isTodayDay
                   ? 'bg-blue-500 border-blue-600'
                   : isSelected
                   ? 'bg-slate-200 border-slate-400'
+                  : weekend
+                  ? 'border-slate-200 bg-slate-50 hover:bg-slate-100'
                   : 'border-slate-200 hover:bg-slate-50'
               } ${!isCurrentMonth && !collapsed ? 'opacity-30' : ''}`}
             >
@@ -85,7 +92,7 @@ export default function CalendarGrid({
                   {format(day, 'd')}
                 </span>
                 {hasData && (
-                  <div className="text-[9px] leading-tight space-y-0 w-full">
+                  <div className="text-[10px] leading-tight space-y-0 w-full">
                     {dayIncome > 0 && (
                       <div className={`font-semibold ${isTodayDay ? 'text-white' : 'text-green-600'}`}>
                         {Math.round(dayIncome)}
