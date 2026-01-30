@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { motion } from 'framer-motion';
-import { Download, Upload, LogOut, Palette, Trash2 } from 'lucide-react';
+import { Download, Upload, LogOut, Palette, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
@@ -28,6 +28,8 @@ const defaultColors = [
 
 export default function Settings() {
   const [showCustomize, setShowCustomize] = useState(false);
+  const [showExpenseCategories, setShowExpenseCategories] = useState(false);
+  const [showIncomeCategories, setShowIncomeCategories] = useState(false);
   const [numberFormat, setNumberFormatState] = useState(getNumberFormat());
   const [importing, setImporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -771,12 +773,32 @@ export default function Settings() {
                 {showCustomize && (
                   <div className="p-4 space-y-6">
                     <div>
-                      <h3 className="font-semibold text-slate-900 mb-3">Expense Categories</h3>
-                      <CategoryManager type="expense" />
+                      <button
+                        className="w-full flex items-center gap-2 text-left mb-3"
+                        onClick={() => setShowExpenseCategories((prev) => !prev)}
+                      >
+                        {showExpenseCategories ? (
+                          <ChevronDown className="w-4 h-4 text-slate-500" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-slate-500" />
+                        )}
+                        <h3 className="font-semibold text-slate-900">Expense Categories</h3>
+                      </button>
+                      {showExpenseCategories && <CategoryManager type="expense" />}
                     </div>
                     <div>
-                      <h3 className="font-semibold text-slate-900 mb-3">Income Categories</h3>
-                      <CategoryManager type="income" />
+                      <button
+                        className="w-full flex items-center gap-2 text-left mb-3"
+                        onClick={() => setShowIncomeCategories((prev) => !prev)}
+                      >
+                        {showIncomeCategories ? (
+                          <ChevronDown className="w-4 h-4 text-slate-500" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-slate-500" />
+                        )}
+                        <h3 className="font-semibold text-slate-900">Income Categories</h3>
+                      </button>
+                      {showIncomeCategories && <CategoryManager type="income" />}
                     </div>
                   </div>
                 )}

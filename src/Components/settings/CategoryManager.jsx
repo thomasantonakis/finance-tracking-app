@@ -5,6 +5,14 @@ import { Plus, Edit, Trash2, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { formatAmount } from '@/utils';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -22,12 +30,14 @@ const colorOptions = [
   '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6',
   '#a855f7', '#d946ef', '#ec4899', '#f43f5e'
 ];
+const RESERVED_CATEGORY_NAMES = new Set(['starting balance', 'system - starting balance']);
 
 export default function CategoryManager({ type }) {
   const [editing, setEditing] = useState(null);
   const [creating, setCreating] = useState(false);
   const [formData, setFormData] = useState({ name: '', color: colorOptions[0] });
   const [mergeDialog, setMergeDialog] = useState({ open: false, existingCategory: null, editingId: null });
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, category: null, target: '' });
   const queryClient = useQueryClient();
 
   const entityName = type === 'expense' ? 'ExpenseCategory' : 'IncomeCategory';
@@ -46,9 +56,9 @@ export default function CategoryManager({ type }) {
       categoriesMap.set(nameLower, cat);
     }
   });
-  const categories = Array.from(categoriesMap.values()).sort((a, b) => 
-    a.name.localeCompare(b.name)
-  );
+  const categories = Array.from(categoriesMap.values())
+    .filter((cat) => !RESERVED_CATEGORY_NAMES.has(cat.name.toLowerCase()))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const { data: transactions = [] } = useQuery({
     queryKey: [transactionEntity],
@@ -75,31 +85,32 @@ export default function CategoryManager({ type }) {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id) => {
-      const cat = categories.find((c) => c.id === id);
-      if (!cat) throw new Error('Category not found');
-      const inUse = transactions.some((t) => t.category === cat.name);
-      if (inUse) {
-        throw new Error('Category in use');
+    mutationFn: async (category) => {
+      const nameLower = category.name.toLowerCase();
+      const duplicates = rawCategories.filter((c) => c.name.toLowerCase() === nameLower);
+      for (const dup of duplicates) {
+        await base44.entities[entityName].delete(dup.id);
       }
-      return base44.entities[entityName].delete(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [entityName] });
+      queryClient.invalidateQueries({ queryKey: [transactionEntity] });
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['income'] });
       toast.success('Category deleted');
     },
-    onError: (error) => {
-      if (error.message === 'Category in use') {
-        toast.error('Cannot delete a category that has transactions.');
-      } else {
-        toast.error('Failed to delete category');
-      }
+    onError: () => {
+      toast.error('Failed to delete category');
     },
   });
 
   const handleCreate = () => {
     if (!formData.name) {
       toast.error('Please enter a category name');
+      return;
+    }
+    if (RESERVED_CATEGORY_NAMES.has(formData.name.toLowerCase())) {
+      toast.error('This category name is reserved.');
       return;
     }
     createMutation.mutate({
@@ -116,6 +127,10 @@ export default function CategoryManager({ type }) {
     }
     
     const newName = formData.name.toLowerCase();
+    if (RESERVED_CATEGORY_NAMES.has(newName)) {
+      toast.error('This category name is reserved.');
+      return;
+    }
     const currentCategory = categories.find(c => c.id === id);
     const existingCategory = categories.find(c => c.name.toLowerCase() === newName && c.id !== id);
     
@@ -168,6 +183,41 @@ export default function CategoryManager({ type }) {
     toast.success(`Categories merged. ${transactionsToUpdate.length} transaction(s) moved to "${existingCategory.name}".`);
   };
 
+  const openDeleteDialog = (category) => {
+    const hasTransactions = transactions.some((t) => t.category === category.name);
+    if (!hasTransactions) {
+      deleteMutation.mutate(category);
+      return;
+    }
+    setDeleteDialog({ open: true, category, target: '' });
+  };
+
+  const handleMoveAndDelete = async () => {
+    const categoryToDelete = deleteDialog.category;
+    const targetName = deleteDialog.target;
+    if (!categoryToDelete || !targetName) return;
+
+    const transactionsToUpdate = transactions.filter((t) => t.category === categoryToDelete.name);
+    const totalAmount = transactionsToUpdate.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    for (const t of transactionsToUpdate) {
+      await base44.entities[transactionEntity].update(t.id, { category: targetName });
+    }
+
+    const nameLower = categoryToDelete.name.toLowerCase();
+    const duplicates = rawCategories.filter((c) => c.name.toLowerCase() === nameLower);
+    for (const dup of duplicates) {
+      await base44.entities[entityName].delete(dup.id);
+    }
+    queryClient.invalidateQueries({ queryKey: [entityName] });
+    queryClient.invalidateQueries({ queryKey: [transactionEntity] });
+    queryClient.invalidateQueries({ queryKey: ['expenses'] });
+    queryClient.invalidateQueries({ queryKey: ['income'] });
+    setDeleteDialog({ open: false, category: null, target: '' });
+    toast.success(
+      `Category deleted. ${transactionsToUpdate.length} transaction(s) moved (total ${formatAmount(totalAmount)}).`
+    );
+  };
+
   const startEdit = (category) => {
     setEditing(category.id);
     setFormData({ name: category.name, color: category.color });
@@ -178,6 +228,14 @@ export default function CategoryManager({ type }) {
     setCreating(false);
     setFormData({ name: '', color: colorOptions[0] });
   };
+
+  const deleteDialogTransactions = deleteDialog.category
+    ? transactions.filter((t) => t.category === deleteDialog.category.name)
+    : [];
+  const deleteDialogTotal = deleteDialogTransactions.reduce(
+    (sum, t) => sum + (Number(t.amount) || 0),
+    0
+  );
 
   return (
     <div className="space-y-3">
@@ -221,7 +279,7 @@ export default function CategoryManager({ type }) {
               <Button
                 size="icon"
                 variant="ghost"
-                onClick={() => deleteMutation.mutate(category.id)}
+                onClick={() => openDeleteDialog(category)}
               >
                 <Trash2 className="w-4 h-4 text-red-600" />
               </Button>
@@ -282,6 +340,64 @@ export default function CategoryManager({ type }) {
             </AlertDialogCancel>
             <AlertDialogAction onClick={handleMerge}>
               Merge Categories
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => !open && setDeleteDialog({ open: false, category: null, target: '' })}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete category?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This category has transactions. To delete it, move those transactions to another category first.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="text-xs text-slate-500">
+            {deleteDialog.category ? (
+              <>
+                Affects {deleteDialogTransactions.length} transaction(s), total {formatAmount(deleteDialogTotal)}.
+              </>
+            ) : null}
+          </div>
+          <div className="space-y-2">
+            <Label>Move transactions to</Label>
+            <Select
+              value={deleteDialog.target}
+              onValueChange={(value) => setDeleteDialog((prev) => ({ ...prev, target: value }))}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select category" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories
+                  .filter((c) => c.id !== deleteDialog.category?.id)
+                  .filter((c) => !RESERVED_CATEGORY_NAMES.has(c.name.toLowerCase()))
+                  .map((c) => (
+                    <SelectItem key={c.id} value={c.name}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            {categories.filter((c) => c.id !== deleteDialog.category?.id).length === 0 && (
+              <p className="text-xs text-slate-500">
+                Create another category first, then move transactions.
+              </p>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteDialog({ open: false, category: null, target: '' })}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleMoveAndDelete}
+              disabled={!deleteDialog.target}
+            >
+              Move & Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
