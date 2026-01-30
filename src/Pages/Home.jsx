@@ -15,10 +15,8 @@ import {
   subYears,
 } from 'date-fns';
 import NetWorthCard from '../Components/dashboard/NetWorthCard';
-import CategoryBreakdown from '../Components/dashboard/CategoryBreakdown';
 import RecentTransactions from '../Components/dashboard/RecentTransactions';
 import FloatingAddButton from '../Components/transactions/FloatingAddButton';
-import AccountsBreakdown from '../Components/dashboard/AccountsBreakdown';
 import { ensureStartingBalanceTransactions, useSessionState } from '@/utils';
 
 export default function Home() {
@@ -196,54 +194,18 @@ export default function Home() {
       ? (netWorthDelta === 0 ? 0 : (netWorthDelta > 0 ? Infinity : -Infinity))
       : (netWorthDelta / percentBase) * 100;
 
-  const accountBalances = {};
-  accounts.forEach(account => {
-    const accountIncome = income
-      .filter(i => i.account_id === account.id)
-      .reduce((sum, i) => sum + (i.amount || 0), 0);
-    
-    const accountExpenses = expenses
-      .filter(e => e.account_id === account.id)
-      .reduce((sum, e) => sum + (e.amount || 0), 0);
-    
-    const transfersOut = transfers
-      .filter(t => t.from_account_id === account.id)
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
-    
-    const transfersIn = transfers
-      .filter(t => t.to_account_id === account.id)
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
-    
-    accountBalances[account.id] = accountIncome - accountExpenses - transfersOut + transfersIn;
-  });
-
-  const expensesByCategory = filteredExpenses.reduce((acc, expense) => {
-    const cat = expense.category;
-    if (!acc[cat]) acc[cat] = 0;
-    acc[cat] += expense.amount || 0;
-    return acc;
-  }, {});
-
-  const incomeByCategory = filteredIncome.reduce((acc, inc) => {
-    const cat = inc.category;
-    if (!acc[cat]) acc[cat] = 0;
-    acc[cat] += inc.amount || 0;
-    return acc;
-  }, {});
-
-  const expenseData = Object.entries(expensesByCategory)
-    .map(([category, total]) => ({ category, total }))
-    .sort((a, b) => b.total - a.total);
-
-  const incomeData = Object.entries(incomeByCategory)
-    .map(([category, total]) => ({ category, total }))
-    .sort((a, b) => b.total - a.total);
+  const isSystemStarting = (t) =>
+    (t.category || '').toLowerCase() === 'starting balance' ||
+    (t.category || '').toLowerCase() === 'system - starting balance';
 
   const allTransactions = [
     ...expenses.map(e => ({ ...e, type: 'expense' })),
     ...income.map(i => ({ ...i, type: 'income' })),
     ...transfers.map(t => ({ ...t, type: 'transfer' }))
-  ].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
+  ]
+    .filter((t) => t.type === 'transfer' || !isSystemStarting(t))
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 10);
 
   const isLoading = loadingExpenses || loadingIncome;
 
@@ -278,24 +240,6 @@ export default function Home() {
           />
 
           <FloatingAddButton onSuccess={handleSuccess} />
-
-          <AccountsBreakdown 
-            accounts={accounts}
-            accountBalances={accountBalances}
-          />
-
-          <div className="grid lg:grid-cols-2 gap-6">
-            <CategoryBreakdown 
-              data={expenseData} 
-              type="expense" 
-              total={totalExpenses}
-            />
-            <CategoryBreakdown 
-              data={incomeData} 
-              type="income" 
-              total={totalIncome}
-            />
-          </div>
 
           <RecentTransactions 
             transactions={allTransactions}

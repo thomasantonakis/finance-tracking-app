@@ -165,26 +165,26 @@ export default function AccountTransactionsList({
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-slate-400 hover:text-blue-500"
+                              className="h-10 w-10 bg-blue-50 text-blue-600 hover:bg-blue-100"
                               onClick={() => handleEdit(transaction, transaction.type)}
                             >
-                              <Edit className="w-4 h-4" />
+                              <Edit className="w-5 h-5" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-slate-400 hover:text-slate-900"
+                              className="h-10 w-10 bg-amber-50 text-amber-600 hover:bg-amber-100"
                               onClick={() => handleDuplicate(transaction, transaction.type)}
                             >
-                              <Copy className="w-4 h-4" />
+                              <Copy className="w-5 h-5" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-slate-400 hover:text-red-500"
+                              className="h-10 w-10 bg-red-50 text-red-600 hover:bg-red-100"
                               onClick={() => onDelete(transaction.id, transaction.type)}
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-5 h-5" />
                             </Button>
                           </>
                         )}
