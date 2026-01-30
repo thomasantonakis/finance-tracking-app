@@ -21,10 +21,15 @@ export default function AccountTransactionsList({
 
   const getCreatedStamp = (t) => t?.created_at ?? t?.created_date ?? t?.date;
   const getUpdatedStamp = (t) => t?.updated_at ?? t?.updated_date ?? getCreatedStamp(t);
+  const isStartingBalance = (t) =>
+    t?.type !== 'transfer' && (t?.category || '').toLowerCase() === 'starting balance';
+
+  const startingBalanceTransactions = transactions.filter(isStartingBalance);
+  const displayTransactions = transactions.filter((t) => !isStartingBalance(t));
 
   // Group by month
   const groupedByMonth = {};
-  transactions.forEach(t => {
+  displayTransactions.forEach(t => {
     const monthKey = format(parseISO(t.date), 'yyyy-MM');
     if (!groupedByMonth[monthKey]) {
       groupedByMonth[monthKey] = [];
@@ -92,6 +97,7 @@ export default function AccountTransactionsList({
                 return new Date(getUpdatedStamp(b)) - new Date(getUpdatedStamp(a));
               })
               .map((transaction, idx) => {
+                const isStarting = isStartingBalance(transaction);
                 const transactionBalance = runningBalanceMap[transaction.id] || 0;
                 
                 return (
@@ -154,30 +160,34 @@ export default function AccountTransactionsList({
                              (transaction.from_account_id === selectedAccount ? '-' : '+')
                            : '-'}€{formatAmount(transaction.amount)}
                         </p>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-slate-400 hover:text-blue-500"
-                          onClick={() => handleEdit(transaction, transaction.type)}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-slate-400 hover:text-slate-900"
-                          onClick={() => handleDuplicate(transaction, transaction.type)}
-                        >
-                          <Copy className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-slate-400 hover:text-red-500"
-                          onClick={() => onDelete(transaction.id, transaction.type)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        {!isStarting && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-slate-400 hover:text-blue-500"
+                              onClick={() => handleEdit(transaction, transaction.type)}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-slate-400 hover:text-slate-900"
+                              onClick={() => handleDuplicate(transaction, transaction.type)}
+                            >
+                              <Copy className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-slate-400 hover:text-red-500"
+                              onClick={() => onDelete(transaction.id, transaction.type)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                       <p className="text-[11px] text-slate-400 mt-0.5">Bal: €{formatAmount(transactionBalance)}</p>
                     </div>
@@ -187,6 +197,22 @@ export default function AccountTransactionsList({
           </div>
         </div>
       ))}
+
+      {startingBalanceTransactions.length > 0 && (
+        (() => {
+          const startTx = [...startingBalanceTransactions].sort((a, b) => {
+            const dateCompare = new Date(a.date) - new Date(b.date);
+            if (dateCompare !== 0) return dateCompare;
+            return new Date(getCreatedStamp(a)) - new Date(getCreatedStamp(b));
+          })[0];
+          const sign = startTx?.type === 'income' ? '+' : '-';
+          return (
+        <div className="flex items-center justify-end px-2 pt-1 text-[11px] text-slate-400">
+          Start Balance: {sign}€{formatAmount(startTx?.amount || 0)}
+        </div>
+          );
+        })()
+      )}
 
       {editingTransaction && editingType !== 'transfer' && (
         <EditTransactionModal

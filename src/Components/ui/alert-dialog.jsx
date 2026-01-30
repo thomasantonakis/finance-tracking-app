@@ -38,7 +38,7 @@ export function AlertDialogFooter({ children }) {
 export function AlertDialogAction({ className = "", ...props }) {
   return (
     <Button
-      className={`bg-slate-900 text-white border-slate-900 ${className}`}
+      className={`!bg-slate-900 !text-white !border-slate-900 hover:!bg-slate-800 ${className}`}
       {...props}
     />
   );

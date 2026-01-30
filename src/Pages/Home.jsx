@@ -19,7 +19,7 @@ import CategoryBreakdown from '../Components/dashboard/CategoryBreakdown';
 import RecentTransactions from '../Components/dashboard/RecentTransactions';
 import FloatingAddButton from '../Components/transactions/FloatingAddButton';
 import AccountsBreakdown from '../Components/dashboard/AccountsBreakdown';
-import { useSessionState } from '@/utils';
+import { ensureStartingBalanceTransactions, useSessionState } from '@/utils';
 
 export default function Home() {
   const queryClient = useQueryClient();
@@ -44,6 +44,10 @@ export default function Home() {
     queryKey: ['transfers'],
     queryFn: () => base44.entities.Transfer.list('-date'),
   });
+
+  useEffect(() => {
+    ensureStartingBalanceTransactions(accounts, queryClient);
+  }, [accounts, queryClient]);
 
   const deleteExpenseMutation = useMutation({
     mutationFn: (id) => base44.entities.Expense.delete(id),
@@ -210,7 +214,7 @@ export default function Home() {
       .filter(t => t.to_account_id === account.id)
       .reduce((sum, t) => sum + (t.amount || 0), 0);
     
-    accountBalances[account.id] = account.starting_balance + accountIncome - accountExpenses - transfersOut + transfersIn;
+    accountBalances[account.id] = accountIncome - accountExpenses - transfersOut + transfersIn;
   });
 
   const expensesByCategory = filteredExpenses.reduce((acc, expense) => {

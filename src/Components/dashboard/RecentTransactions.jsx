@@ -15,6 +15,8 @@ export default function RecentTransactions({ transactions, onDelete, onUpdate })
   const [editingType, setEditingType] = useState(null);
   const [duplicatingTransaction, setDuplicatingTransaction] = useState(null);
   const [duplicatingType, setDuplicatingType] = useState(null);
+  const isStartingBalance = (t) =>
+    t?.type !== 'transfer' && (t?.category || '').toLowerCase() === 'starting balance';
 
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts'],
@@ -120,30 +122,34 @@ export default function RecentTransactions({ transactions, onDelete, onUpdate })
                 }`}>
                   {transaction.type === 'transfer' ? '' : transaction.type === 'income' ? '+' : '-'}€{formatAmount(transaction.amount)}
                 </p>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-slate-400 hover:text-blue-500 hover:bg-blue-50"
-                  onClick={() => handleEdit(transaction, transaction.type)}
-                >
-                  <Edit className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-slate-400 hover:text-slate-900 hover:bg-slate-100"
-                  onClick={() => handleDuplicate(transaction, transaction.type)}
-                >
-                  <Copy className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50"
-                  onClick={() => onDelete(transaction.id, transaction.type)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
+                {!isStartingBalance(transaction) && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-slate-400 hover:text-blue-500 hover:bg-blue-50"
+                      onClick={() => handleEdit(transaction, transaction.type)}
+                    >
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-slate-400 hover:text-slate-900 hover:bg-slate-100"
+                      onClick={() => handleDuplicate(transaction, transaction.type)}
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50"
+                      onClick={() => onDelete(transaction.id, transaction.type)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </>
+                )}
               </div>
             </motion.div>
           ))}

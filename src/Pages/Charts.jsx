@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { motion } from 'framer-motion';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfYear, endOfYear, eachMonthOfInterval, endOfDay } from 'date-fns';
@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { formatAmount, formatNumber, useSessionState } from '@/utils';
+import { ensureStartingBalanceTransactions, formatAmount, formatNumber, useSessionState } from '@/utils';
 
 export default function Charts() {
   const [currentDate, setCurrentDate] = useSessionState('charts.currentDate', () => new Date());
@@ -19,6 +19,7 @@ export default function Charts() {
   const [showProjected, setShowProjected] = useState(true);
   const [showCumulativeBars, setShowCumulativeBars] = useState(false);
   const [detailChartMode, setDetailChartMode] = useState('bars');
+  const queryClient = useQueryClient();
 
   const { data: expenses = [] } = useQuery({
     queryKey: ['expenses'],
@@ -49,6 +50,10 @@ export default function Charts() {
     queryKey: ['IncomeCategory'],
     queryFn: () => base44.entities.IncomeCategory.list(),
   });
+
+  useEffect(() => {
+    ensureStartingBalanceTransactions(accounts, queryClient);
+  }, [accounts, queryClient]);
 
   const getCategoryColor = (categoryName, type) => {
     const categories = type === 'expense' ? expenseCategories : incomeCategories;
@@ -95,11 +100,7 @@ export default function Charts() {
       }));
     }
 
-    // Calculate starting balance
-    const selectedAcc = accounts.find(a => a.id === selectedAccount);
-    let cumulativeBalance = selectedAccount === 'all' 
-      ? accounts.reduce((sum, a) => sum + a.starting_balance, 0)
-      : (selectedAcc?.starting_balance || 0);
+    const cumulativeBalance = 0;
 
     return periods.map((period, index) => {
       const periodEnd = viewMode === 'months' ? endOfMonth(period.date) : endOfDay(period.date);

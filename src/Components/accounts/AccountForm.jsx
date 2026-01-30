@@ -9,10 +9,90 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { base44 } from '@/api/base44Client';
 import { toast } from 'sonner';
 
 const accountCategories = ['cash', 'bank', 'credit_card', 'savings', 'investment', 'other'];
+
+const STARTING_BALANCE_DATE = '1970-01-01';
+const STARTING_BALANCE_CATEGORY = 'starting balance';
+
+const ensureStartingBalanceTransaction = async (accountId, rawAmount) => {
+  const amount = Number(rawAmount) || 0;
+  const isIncome = amount > 0;
+  const absAmount = Math.abs(amount);
+
+  const [incomeList, expenseList] = await Promise.all([
+    base44.entities.Income.list(),
+    base44.entities.Expense.list(),
+  ]);
+
+  const matchIncome = incomeList.find(
+    (t) =>
+      t.account_id === accountId &&
+      (t.category || '').toLowerCase() === STARTING_BALANCE_CATEGORY
+  );
+  const matchExpense = expenseList.find(
+    (t) =>
+      t.account_id === accountId &&
+      (t.category || '').toLowerCase() === STARTING_BALANCE_CATEGORY
+  );
+
+  if (isIncome) {
+    if (matchExpense) {
+      await base44.entities.Expense.delete(matchExpense.id);
+    }
+    if (matchIncome) {
+      await base44.entities.Income.update(matchIncome.id, {
+        amount: absAmount,
+        date: STARTING_BALANCE_DATE,
+        cleared: true,
+        projected: true,
+      });
+    } else {
+      await base44.entities.Income.create({
+        amount: absAmount,
+        category: STARTING_BALANCE_CATEGORY,
+        account_id: accountId,
+        date: STARTING_BALANCE_DATE,
+        notes: 'starting balance',
+        cleared: true,
+        projected: true,
+      });
+    }
+  } else {
+    if (matchIncome) {
+      await base44.entities.Income.delete(matchIncome.id);
+    }
+    if (matchExpense) {
+      await base44.entities.Expense.update(matchExpense.id, {
+        amount: absAmount,
+        date: STARTING_BALANCE_DATE,
+        cleared: true,
+        projected: true,
+      });
+    } else {
+      await base44.entities.Expense.create({
+        amount: absAmount,
+        category: STARTING_BALANCE_CATEGORY,
+        account_id: accountId,
+        date: STARTING_BALANCE_DATE,
+        notes: 'starting balance',
+        cleared: true,
+        projected: true,
+      });
+    }
+  }
+};
 
 const colorOptions = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', 
@@ -21,6 +101,8 @@ const colorOptions = [
 
 export default function AccountForm({ account, onSuccess, onCancel }) {
   const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [formData, setFormData] = useState(account ? {
     name: account.name,
     starting_balance: account.starting_balance.toString(),
@@ -50,19 +132,72 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
         category: formData.category,
         color: formData.color
       });
+      await ensureStartingBalanceTransaction(account.id, formData.starting_balance);
       toast.success('Account updated successfully');
     } else {
-      await base44.entities.Account.create({
+      const created = await base44.entities.Account.create({
         name: formData.name,
         starting_balance: parseFloat(formData.starting_balance),
         category: formData.category,
         color: formData.color
       });
+      await ensureStartingBalanceTransaction(created.id, formData.starting_balance);
       toast.success('Account created successfully');
     }
     
     setLoading(false);
     onSuccess();
+  };
+
+  const handleDelete = async () => {
+    if (!account) return;
+    setConfirmDeleteOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!account) return;
+    setConfirmDeleteOpen(false);
+    setDeleting(true);
+    try {
+      const [expenses, income, transfers] = await Promise.all([
+        base44.entities.Expense.list(),
+        base44.entities.Income.list(),
+        base44.entities.Transfer.list(),
+      ]);
+
+      const isStarting = (t) =>
+        (t.category || '').toLowerCase() === STARTING_BALANCE_CATEGORY;
+      const accExpenses = expenses.filter((e) => e.account_id === account.id);
+      const accIncome = income.filter((i) => i.account_id === account.id);
+      const hasRegularExpense = accExpenses.some((e) => !isStarting(e));
+      const hasRegularIncome = accIncome.some((i) => !isStarting(i));
+      const hasTransfer = transfers.some(
+        (t) => t.from_account_id === account.id || t.to_account_id === account.id
+      );
+      const startingAmount = Number(account.starting_balance) || 0;
+
+      if (hasRegularExpense || hasRegularIncome || hasTransfer || startingAmount !== 0) {
+        toast.error('Account cannot be deleted while it has transactions or a non-zero starting balance.');
+        return;
+      }
+
+      const startingExpenses = accExpenses.filter(isStarting);
+      const startingIncome = accIncome.filter(isStarting);
+      for (const item of startingExpenses) {
+        await base44.entities.Expense.delete(item.id);
+      }
+      for (const item of startingIncome) {
+        await base44.entities.Income.delete(item.id);
+      }
+
+      await base44.entities.Account.delete(account.id);
+      toast.success('Account deleted successfully');
+      onSuccess();
+    } catch (error) {
+      toast.error('Failed to delete account');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -141,18 +276,50 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
           variant="outline"
           className="flex-1"
           onClick={onCancel}
-          disabled={loading}
+          disabled={loading || deleting}
         >
           Cancel
         </Button>
         <Button
           type="submit"
           className="flex-1 bg-slate-900 hover:bg-slate-800"
-          disabled={loading}
+          disabled={loading || deleting}
         >
           {loading ? (account ? 'Updating...' : 'Creating...') : (account ? 'Update Account' : 'Create Account')}
         </Button>
       </div>
+
+      {account && (
+        <div className="pt-1">
+          <Button
+            type="button"
+            className="w-full border-red-200 text-red-600 hover:bg-red-50"
+            onClick={handleDelete}
+            disabled={loading || deleting}
+          >
+            {deleting ? 'Deleting...' : 'Delete Account'}
+          </Button>
+        </div>
+      )}
+
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this account. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <AlertDialogCancel onClick={() => setConfirmDeleteOpen(false)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDelete}>
+              Delete
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </form>
   );
 }

@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { motion } from 'framer-motion';
-import { GripVertical, ChevronRight } from 'lucide-react';
+import { GripVertical, ChevronRight, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatAmount } from '@/utils';
 
-export default function AccountsList({ accounts, editMode, onReorder, onEdit, onSelect, getAccountBalance }) {
+export default function AccountsList({ accounts, editMode, onReorder, onEdit, onDelete, onSelect, getAccountBalance }) {
   const handleDragEnd = (result) => {
     if (!result.destination) return;
     if (result.destination.index === result.source.index) return;
@@ -56,6 +56,15 @@ export default function AccountsList({ accounts, editMode, onReorder, onEdit, on
                             className="text-blue-600"
                           >
                             Edit
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => onDelete?.(account)}
+                            className="text-red-500 hover:text-red-600"
+                            aria-label={`Delete ${account.name}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </Button>
                         </div>
                       </div>

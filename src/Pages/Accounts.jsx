@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import AccountForm from '../Components/accounts/AccountForm';
 import AccountsList from '../Components/accounts/AccountsList';
 import AccountTransactionsList from '../Components/accounts/AccountTransactionsList';
-import { formatAmount } from '@/utils';
+import { ensureStartingBalanceTransactions, formatAmount } from '@/utils';
 import { getAccountsOrder, setAccountsOrder } from '@/utils';
 import {
   Dialog,
@@ -16,6 +16,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export default function Accounts() {
   const [editMode, setEditMode] = useState(false);
@@ -23,6 +32,8 @@ export default function Accounts() {
   const [editingAccount, setEditingAccount] = useState(null);
   const [creatingAccount, setCreatingAccount] = useState(false);
   const [orderedAccounts, setOrderedAccounts] = useState([]);
+  const [deleteReport, setDeleteReport] = useState({ open: false, success: false, title: '', reasons: [] });
+  const [pendingDeleteAccount, setPendingDeleteAccount] = useState(null);
   const queryClient = useQueryClient();
 
   const applyStoredOrder = (list) => {
@@ -45,8 +56,10 @@ export default function Accounts() {
   });
 
   React.useEffect(() => {
-    if (accounts.length > 0 && (orderedAccounts.length === 0 || accounts.length !== orderedAccounts.length)) {
+    if (accounts.length > 0) {
       setOrderedAccounts(applyStoredOrder(accounts));
+    } else if (orderedAccounts.length !== 0) {
+      setOrderedAccounts([]);
     }
   }, [accounts]);
 
@@ -85,8 +98,12 @@ export default function Accounts() {
       .filter(t => t.to_account_id === accountId)
       .reduce((sum, t) => sum + (t.amount || 0), 0);
     
-    return account.starting_balance + accountIncome - accountExpenses - transfersOut + transfersIn;
+    return accountIncome - accountExpenses - transfersOut + transfersIn;
   };
+
+  React.useEffect(() => {
+    ensureStartingBalanceTransactions(accounts, queryClient);
+  }, [accounts, queryClient]);
 
   const getAccountTransactions = (accountId) => {
     const accountExpenses = expenses.filter(e => e.account_id === accountId).map(e => ({ ...e, type: 'expense' }));
@@ -157,6 +174,70 @@ export default function Accounts() {
     queryClient.invalidateQueries({ queryKey: ['expenses'] });
     queryClient.invalidateQueries({ queryKey: ['income'] });
     queryClient.invalidateQueries({ queryKey: ['transfers'] });
+  };
+
+  const getDeleteReasons = (account) => {
+    const isStarting = (t) => (t.category || '').toLowerCase() === 'starting balance';
+    const accExpenses = expenses.filter((e) => e.account_id === account.id);
+    const accIncome = income.filter((i) => i.account_id === account.id);
+    const hasRegularExpense = accExpenses.some((e) => !isStarting(e));
+    const hasRegularIncome = accIncome.some((i) => !isStarting(i));
+    const hasTransfer = transfers.some(
+      (t) => t.from_account_id === account.id || t.to_account_id === account.id
+    );
+    const startingAmount = Number(account.starting_balance) || 0;
+
+    const reasons = [];
+    if (hasRegularExpense) reasons.push('Has expense transactions');
+    if (hasRegularIncome) reasons.push('Has income transactions');
+    if (hasTransfer) reasons.push('Has transfers');
+    if (startingAmount !== 0) reasons.push('Starting balance is not zero');
+    return reasons;
+  };
+
+  const handleDeleteAccount = async (account) => {
+    const reasons = getDeleteReasons(account);
+    if (reasons.length > 0) {
+      setDeleteReport({
+        open: true,
+        success: false,
+        title: `Account not deleted: ${account.name}`,
+        reasons,
+      });
+      return;
+    }
+
+    try {
+      const isStarting = (t) => (t.category || '').toLowerCase() === 'starting balance';
+      const accExpenses = expenses.filter((e) => e.account_id === account.id && isStarting(e));
+      const accIncome = income.filter((i) => i.account_id === account.id && isStarting(i));
+      for (const item of accExpenses) {
+        await base44.entities.Expense.delete(item.id);
+      }
+      for (const item of accIncome) {
+        await base44.entities.Income.delete(item.id);
+      }
+      await base44.entities.Account.delete(account.id);
+
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['income'] });
+
+      setOrderedAccounts((prev) => prev.filter((acc) => acc.id !== account.id));
+      setDeleteReport({
+        open: true,
+        success: true,
+        title: `Account deleted: ${account.name}`,
+        reasons: [],
+      });
+    } catch (error) {
+      setDeleteReport({
+        open: true,
+        success: false,
+        title: `Account not deleted: ${account.name}`,
+        reasons: ['Unexpected error while deleting the account'],
+      });
+    }
   };
 
   const getAccountName = (accountId) => {
@@ -268,6 +349,7 @@ export default function Accounts() {
               editMode={editMode}
               onReorder={handleReorder}
               onEdit={setEditingAccount}
+              onDelete={setPendingDeleteAccount}
               onSelect={setSelectedAccount}
               getAccountBalance={getAccountBalance}
             />
@@ -301,6 +383,64 @@ export default function Accounts() {
           />
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={deleteReport.open}
+        onOpenChange={(open) => !open && setDeleteReport({ open: false, success: false, title: '', reasons: [] })}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{deleteReport.title}</AlertDialogTitle>
+            {deleteReport.success ? (
+              <AlertDialogDescription>Account deleted successfully.</AlertDialogDescription>
+            ) : (
+              <AlertDialogDescription>
+                {deleteReport.reasons.length > 0 && (
+                  <div className="mt-2">
+                    <p className="font-medium text-slate-900 mb-2">Reasons:</p>
+                    <ul className="list-disc pl-5 text-sm text-slate-600 space-y-1">
+                      {deleteReport.reasons.map((reason) => (
+                        <li key={reason}>{reason}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </AlertDialogDescription>
+            )}
+          </AlertDialogHeader>
+          <div className="flex justify-end pt-2">
+            <AlertDialogAction onClick={() => setDeleteReport({ open: false, success: false, title: '', reasons: [] })}>
+              Close
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!pendingDeleteAccount} onOpenChange={(open) => !open && setPendingDeleteAccount(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this account. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <AlertDialogCancel onClick={() => setPendingDeleteAccount(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingDeleteAccount) {
+                  handleDeleteAccount(pendingDeleteAccount);
+                }
+                setPendingDeleteAccount(null);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

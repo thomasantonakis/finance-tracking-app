@@ -9,7 +9,16 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import CategoryManager from '../Components/settings/CategoryManager';
 import { Progress } from '@/components/ui/progress';
-import { getNumberFormat, setNumberFormat } from '@/utils';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { ensureStartingBalanceTransactions, getNumberFormat, setNumberFormat } from '@/utils';
 
 const defaultColors = [
   '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#22c55e', '#10b981',
@@ -27,6 +36,13 @@ export default function Settings() {
   const [importLogs, setImportLogs] = useState([]);
   const [deleteAccountsReport, setDeleteAccountsReport] = useState({ deleted: [], skipped: [] });
   const [showDeleteAccountsReport, setShowDeleteAccountsReport] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: '',
+    description: '',
+    confirmLabel: 'Confirm',
+    onConfirm: null,
+  });
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -122,7 +138,10 @@ export default function Settings() {
       ['Type', 'Date', 'Amount', 'Account', 'Category', 'Subcategory', 'Notes', 'Cleared', 'Projected']
     ];
 
+    const isStartingBalance = (t) => (t.category || '').toLowerCase() === 'starting balance';
+
     expenses.forEach(e => {
+      if (isStartingBalance(e)) return;
       const account = accounts.find(a => a.id === e.account_id);
       rows.push([
         'expense',
@@ -138,6 +157,7 @@ export default function Settings() {
     });
 
     income.forEach(i => {
+      if (isStartingBalance(i)) return;
       const account = accounts.find(a => a.id === i.account_id);
       rows.push([
         'income',
@@ -168,6 +188,23 @@ export default function Settings() {
       ]);
     });
 
+    accounts.forEach((acc) => {
+      const amount = Number(acc.starting_balance) || 0;
+      if (amount === 0) return;
+      const type = amount > 0 ? 'income' : 'expense';
+      rows.push([
+        type,
+        '1970-01-01',
+        Math.abs(amount),
+        acc.name || '',
+        'SYSTEM - Starting Balance',
+        '',
+        'starting balance',
+        'yes',
+        'yes'
+      ]);
+    });
+
     const csv = rows.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -184,7 +221,8 @@ export default function Settings() {
       ['Type', 'Date', 'Amount', 'Account', 'Category', 'Subcategory', 'Notes', 'Cleared', 'Projected'],
       ['expense', '2026-01-01', '50.12', 'Cash', 'food', 'groceries', 'Weekly shopping', 'yes', 'no'],
       ['income', '2026-01-01', '1234.56', 'Bank', 'salary', '', 'Monthly salary', 'yes', 'no'],
-      ['transfer', '2026-01-01', '200.75', 'Bank', 'Savings', '', 'Monthly savings', '', '']
+      ['transfer', '2026-01-01', '200.75', 'Bank', 'Savings', '', 'Monthly savings', '', ''],
+      ['income', '1970-01-01', '1000.00', 'Bank', 'SYSTEM - Starting Balance', '', 'starting balance', 'yes', 'yes']
     ];
 
     const csv = rows.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
@@ -199,20 +237,28 @@ export default function Settings() {
   };
 
   const handleDeleteAllData = async () => {
-    const confirmed = window.confirm(
-      '⚠️ WARNING: This will permanently delete ALL your financial data including:\n\n' +
-      '• All expenses\n' +
-      '• All income\n' +
-      '• All transfers\n\n' +
-      'This action CANNOT be undone.\n\n' +
-      'Are you absolutely sure you want to continue?'
-    );
+    setConfirmDialog({
+      open: true,
+      title: 'Delete all data?',
+      description:
+        'This will permanently delete ALL your financial data including all expenses, income, and transfers. This action cannot be undone.',
+      confirmLabel: 'Continue',
+      onConfirm: () => {
+        setConfirmDialog({
+          open: true,
+          title: 'Final confirmation',
+          description: 'Are you absolutely sure you want to delete all data?',
+          confirmLabel: 'Delete all data',
+          onConfirm: async () => {
+            setConfirmDialog((prev) => ({ ...prev, open: false }));
+            await runDeleteAllData();
+          },
+        });
+      },
+    });
+  };
 
-    if (!confirmed) return;
-
-    const doubleCheck = window.confirm('Final confirmation: Delete all data?');
-    if (!doubleCheck) return;
-
+  const runDeleteAllData = async () => {
     setDeleting(true);
     setDeleteProgress(0);
 
@@ -250,12 +296,19 @@ export default function Settings() {
   };
 
   const handleDeleteAllAccounts = async () => {
-    const confirmed = window.confirm(
-      '⚠️ WARNING: This will permanently delete ALL accounts.\n\n' +
-      'This action CANNOT be undone.\n\n' +
-      'Are you absolutely sure you want to continue?'
-    );
-    if (!confirmed) return;
+    setConfirmDialog({
+      open: true,
+      title: 'Delete all accounts?',
+      description: 'This will permanently delete ALL accounts. This action cannot be undone.',
+      confirmLabel: 'Delete all accounts',
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, open: false }));
+        await runDeleteAllAccounts();
+      },
+    });
+  };
+
+  const runDeleteAllAccounts = async () => {
 
     setDeleting(true);
     setDeleteProgress(0);
@@ -273,13 +326,24 @@ export default function Settings() {
       const skippedNames = [];
 
       for (const acc of accountsToDelete) {
-        const hasExpense = expensesToCheck.some((e) => e.account_id === acc.id);
-        const hasIncome = incomeToCheck.some((i) => i.account_id === acc.id);
+        const isStarting = (t) => (t.category || '').toLowerCase() === 'starting balance';
+        const accExpenses = expensesToCheck.filter((e) => e.account_id === acc.id);
+        const accIncome = incomeToCheck.filter((i) => i.account_id === acc.id);
+        const hasExpense = accExpenses.some((e) => !isStarting(e));
+        const hasIncome = accIncome.some((i) => !isStarting(i));
         const hasTransfer = transfersToCheck.some(
           (t) => t.from_account_id === acc.id || t.to_account_id === acc.id
         );
+        const startingIncome = accIncome.find(isStarting);
+        const startingExpense = accExpenses.find(isStarting);
+        const startingAmount = startingIncome
+          ? startingIncome.amount
+          : startingExpense
+          ? -startingExpense.amount
+          : 0;
+        const hasNonZeroStarting = Math.abs(Number(startingAmount) || 0) > 0;
 
-        if (hasExpense || hasIncome || hasTransfer) {
+        if (hasExpense || hasIncome || hasTransfer || hasNonZeroStarting) {
           skippedNames.push(acc.name);
         } else {
           await base44.entities.Account.delete(acc.id);
@@ -391,6 +455,7 @@ export default function Settings() {
       currentIncomeCategories.forEach(c => incomeCatsMap[c.name] = c);
 
       let imported = 0;
+      let needsStartingBalanceSync = false;
       for (let i = 0; i < data.length; i++) {
         const row = data[i];
         const rowNumber = i + 2;
@@ -405,6 +470,8 @@ export default function Settings() {
           const notes = row[6] || undefined;
           const cleared = row[7]?.toLowerCase() === 'yes';
           const projected = row[8]?.toLowerCase() === 'yes';
+          const isSystemStartingBalance =
+            (category || '').toLowerCase() === 'system - starting balance';
 
           if (!type || !date || isNaN(amount) || !accountName) {
             logs.push(`Row ${rowNumber}: Skipped - Missing required fields (type, date, amount, or account)`);
@@ -426,6 +493,16 @@ export default function Settings() {
           const account = accountsMap[accountName];
 
           if (type === 'expense') {
+            if (isSystemStartingBalance) {
+              const startingBalance = -Math.abs(amount);
+              await base44.entities.Account.update(account.id, {
+                starting_balance: startingBalance,
+              });
+              accountsMap[accountName] = { ...account, starting_balance: startingBalance };
+              logs.push(`Row ${rowNumber}: Set starting balance for "${accountName}"`);
+              needsStartingBalanceSync = true;
+              continue;
+            }
             // Auto-create expense category if it doesn't exist (case-insensitive check)
             const existingCat = Object.keys(expenseCatsMap).find(
               key => key.toLowerCase() === category.toLowerCase()
@@ -452,6 +529,16 @@ export default function Settings() {
             });
             imported++;
           } else if (type === 'income') {
+            if (isSystemStartingBalance) {
+              const startingBalance = Math.abs(amount);
+              await base44.entities.Account.update(account.id, {
+                starting_balance: startingBalance,
+              });
+              accountsMap[accountName] = { ...account, starting_balance: startingBalance };
+              logs.push(`Row ${rowNumber}: Set starting balance for "${accountName}"`);
+              needsStartingBalanceSync = true;
+              continue;
+            }
             // Auto-create income category if it doesn't exist (case-insensitive check)
             const existingCat = Object.keys(incomeCatsMap).find(
               key => key.toLowerCase() === category.toLowerCase()
@@ -478,6 +565,10 @@ export default function Settings() {
             });
             imported++;
           } else if (type === 'transfer') {
+            if (isSystemStartingBalance) {
+              logs.push(`Row ${rowNumber}: Skipped - Starting balance rows must be income/expense`);
+              continue;
+            }
             const toAccountName = category;
             
             // Auto-create destination account if it doesn't exist
@@ -509,6 +600,10 @@ export default function Settings() {
         } catch (error) {
           logs.push(`Row ${rowNumber}: Error - ${error.message}`);
         }
+      }
+
+      if (needsStartingBalanceSync) {
+        await ensureStartingBalanceTransactions(Object.values(accountsMap), queryClient);
       }
 
       setImportLogs([...logs, `\n✅ Import completed: ${imported} transactions imported successfully`]);
@@ -582,13 +677,46 @@ export default function Settings() {
               </div>
             </div>
             <div className="mt-6 flex justify-end">
-              <Button variant="outline" onClick={() => setShowDeleteAccountsReport(false)}>
+              <Button
+                onClick={() => setShowDeleteAccountsReport(false)}
+                className="!bg-slate-900 !text-white !border-slate-900 hover:!bg-slate-800"
+              >
                 Close
               </Button>
             </div>
           </div>
         </div>
       )}
+      <AlertDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) =>
+          !open && setConfirmDialog((prev) => ({ ...prev, open: false }))
+        }
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmDialog.title}</AlertDialogTitle>
+            <AlertDialogDescription>{confirmDialog.description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <AlertDialogCancel onClick={() => setConfirmDialog((prev) => ({ ...prev, open: false }))}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const handler = confirmDialog.onConfirm;
+                if (typeof handler === 'function') {
+                  handler();
+                } else {
+                  setConfirmDialog((prev) => ({ ...prev, open: false }));
+                }
+              }}
+            >
+              {confirmDialog.confirmLabel || 'Confirm'}
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
       <div className="max-w-7xl mx-auto px-4 py-6">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
