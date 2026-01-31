@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
+import { format, addWeeks, addMonths, addYears } from 'date-fns';
 import CategoryManager from '../Components/settings/CategoryManager';
 import { Progress } from '@/components/ui/progress';
 import {
@@ -22,6 +22,7 @@ import {
 import { ensureStartingBalanceTransactions, formatAmount, getNumberFormat, setNumberFormat } from '@/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import CategoryCombobox from '@/Components/transactions/CategoryCombobox';
 
 const defaultColors = [
   '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#22c55e', '#10b981',
@@ -34,6 +35,7 @@ export default function Settings() {
   const [showExpenseCategories, setShowExpenseCategories] = useState(false);
   const [showIncomeCategories, setShowIncomeCategories] = useState(false);
   const [showBulkUpdater, setShowBulkUpdater] = useState(false);
+  const [showRecurringModal, setShowRecurringModal] = useState(false);
   const [numberFormat, setNumberFormatState] = useState(getNumberFormat());
   const [importing, setImporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -81,6 +83,20 @@ export default function Settings() {
     successCount: 0,
     failCount: 0,
   });
+  const [recurringForm, setRecurringForm] = useState({
+    type: 'expense',
+    amount: '',
+    category: '',
+    subcategory: '',
+    account_id: '',
+    start_date: format(new Date(), 'yyyy-MM-dd'),
+    end_date: format(new Date(), 'yyyy-MM-dd'),
+    frequency: 'monthly',
+    interval: '1',
+    notes: '',
+    cleared: false,
+    projected: false,
+  });
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -119,6 +135,11 @@ export default function Settings() {
     queryFn: () => base44.entities.Transfer.list(),
   });
 
+  const { data: recurringRules = [] } = useQuery({
+    queryKey: ['recurringRules'],
+    queryFn: () => base44.entities.RecurringRule.list('-created_at'),
+  });
+
   const { data: existingExpenseCategories = [] } = useQuery({
     queryKey: ['ExpenseCategory'],
     queryFn: () => base44.entities.ExpenseCategory.list(),
@@ -134,6 +155,48 @@ export default function Settings() {
     const incomeTx = income.map((i) => ({ ...i, type: 'income' }));
     return [...expenseTx, ...incomeTx];
   }, [expenses, income]);
+
+  const subcategoryTotals = useMemo(() => {
+    const totals = {};
+    allTransactions.forEach((t) => {
+      const sub = (t.subcategory || '').trim();
+      if (!sub) return;
+      const key = sub.toLowerCase();
+      totals[key] = totals[key] || { name: sub, total: 0 };
+      totals[key].total += Number(t.amount) || 0;
+    });
+    return totals;
+  }, [allTransactions]);
+
+  const recurringSubcategoryOptions = useMemo(() => {
+    return Object.values(subcategoryTotals).sort((a, b) => {
+      if (a.total !== b.total) return b.total - a.total;
+      return a.name.localeCompare(b.name);
+    });
+  }, [subcategoryTotals]);
+
+  const recurringTopCategoryBySubcategory = useMemo(() => {
+    const counts = {};
+    allTransactions.forEach((t) => {
+      const sub = (t.subcategory || '').trim();
+      const cat = (t.category || '').trim();
+      if (!sub || !cat) return;
+      const subKey = sub.toLowerCase();
+      const catKey = cat.toLowerCase();
+      if (!counts[subKey]) counts[subKey] = {};
+      if (!counts[subKey][catKey]) counts[subKey][catKey] = { name: cat, count: 0 };
+      counts[subKey][catKey].count += 1;
+    });
+    const result = {};
+    Object.entries(counts).forEach(([subKey, catMap]) => {
+      const best = Object.values(catMap).sort((a, b) => {
+        if (a.count !== b.count) return b.count - a.count;
+        return a.name.localeCompare(b.name);
+      })[0];
+      if (best) result[subKey] = best.name;
+    });
+    return result;
+  }, [allTransactions]);
 
   const reservedCategoryNames = useMemo(
     () => new Set(['starting balance', 'system - starting balance']),
@@ -777,6 +840,92 @@ export default function Settings() {
     }
   };
 
+  const generateRecurringDates = (startDate, endDate, frequency, interval) => {
+    const dates = [];
+    const step = Math.max(Number(interval) || 1, 1);
+    let cursor = new Date(startDate);
+    const end = new Date(endDate);
+    while (cursor <= end) {
+      dates.push(new Date(cursor));
+      if (frequency === 'weekly') {
+        cursor = addWeeks(cursor, step);
+      } else if (frequency === 'yearly') {
+        cursor = addYears(cursor, step);
+      } else {
+        cursor = addMonths(cursor, step);
+      }
+    }
+    return dates;
+  };
+
+  const handleCreateRecurringRule = async () => {
+    const rawCategory = (recurringForm.category || '').trim();
+    const rawSubcategory = (recurringForm.subcategory || '').trim();
+    const existingCategoryMatch = categoryOptions.find(
+      (name) => name.toLowerCase() === rawCategory.toLowerCase()
+    );
+    const normalizedCategory = existingCategoryMatch || rawCategory;
+    const amount = Number(recurringForm.amount);
+    if (!rawCategory || !rawSubcategory || !recurringForm.account_id || !recurringForm.start_date || !recurringForm.end_date || Number.isNaN(amount)) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    const start = new Date(recurringForm.start_date);
+    const end = new Date(recurringForm.end_date);
+    if (start > end) {
+      toast.error('End date must be after start date');
+      return;
+    }
+
+    const rule = await base44.entities.RecurringRule.create({
+      type: recurringForm.type,
+      amount,
+      category: normalizedCategory,
+      subcategory: rawSubcategory,
+      account_id: recurringForm.account_id,
+      start_date: recurringForm.start_date,
+      end_date: recurringForm.end_date,
+      frequency: recurringForm.frequency,
+      interval: Number(recurringForm.interval) || 1,
+      notes: recurringForm.notes || undefined,
+      cleared: recurringForm.cleared,
+      projected: recurringForm.projected,
+    });
+
+    const entity = recurringForm.type === 'income' ? base44.entities.Income : base44.entities.Expense;
+    const dates = generateRecurringDates(recurringForm.start_date, recurringForm.end_date, recurringForm.frequency, recurringForm.interval);
+    for (const date of dates) {
+      await entity.create({
+        amount,
+        category: normalizedCategory,
+        subcategory: rawSubcategory,
+        account_id: recurringForm.account_id,
+        date: format(date, 'yyyy-MM-dd'),
+        notes: recurringForm.notes || undefined,
+        cleared: recurringForm.cleared,
+        projected: recurringForm.projected,
+        recurring_rule_id: rule.id,
+      });
+    }
+
+    queryClient.invalidateQueries();
+    toast.success(`Created ${dates.length} ${recurringForm.type} transaction(s)`);
+    setRecurringForm((prev) => ({
+      ...prev,
+      amount: '',
+      category: '',
+      subcategory: '',
+      notes: '',
+    }));
+    setShowRecurringModal(false);
+  };
+
+  const handleDeleteRecurringRule = async (ruleId) => {
+    await base44.entities.RecurringRule.delete(ruleId);
+    queryClient.invalidateQueries({ queryKey: ['recurringRules'] });
+    toast.success('Recurring rule deleted');
+  };
+
   const getEntityForType = (type) => {
     if (type === 'expense') return base44.entities.Expense;
     return base44.entities.Income;
@@ -942,6 +1091,200 @@ export default function Settings() {
           </div>
         </AlertDialogContent>
       </AlertDialog>
+      <Dialog open={showRecurringModal} onOpenChange={setShowRecurringModal}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Recurring Transactions</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5 max-h-[70vh] overflow-auto pr-1">
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-slate-900">Create Rule</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="space-y-2">
+                  <Label>Type</Label>
+                  <Select
+                    value={recurringForm.type}
+                    onValueChange={(value) => setRecurringForm((prev) => ({ ...prev, type: value }))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="expense">Expense</SelectItem>
+                      <SelectItem value="income">Income</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Account *</Label>
+                  <Select
+                    value={recurringForm.account_id}
+                    onValueChange={(value) => setRecurringForm((prev) => ({ ...prev, account_id: value }))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {accounts.map((account) => (
+                        <SelectItem key={account.id} value={account.id}>
+                          {account.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Amount *</Label>
+                  <Input
+                    type="number"
+                    value={recurringForm.amount}
+                    onChange={(e) => setRecurringForm((prev) => ({ ...prev, amount: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-3">
+                  <CategoryCombobox
+                    id="recurring-subcategory"
+                    label="Subcategory *"
+                    value={recurringForm.subcategory}
+                    onChange={(value) => setRecurringForm((prev) => ({ ...prev, subcategory: value }))}
+                    onSelectItem={(item) => {
+                      const suggested = recurringTopCategoryBySubcategory[item.label.toLowerCase()];
+                      if (suggested) {
+                        setRecurringForm((prev) => ({ ...prev, category: suggested }));
+                      }
+                    }}
+                    categories={recurringSubcategoryOptions.map((item) => item.name)}
+                    placeholder="Select subcategory"
+                    required
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-3">
+                  <CategoryCombobox
+                    id="recurring-category"
+                    label="Category *"
+                    value={recurringForm.category}
+                    onChange={(value) => setRecurringForm((prev) => ({ ...prev, category: value }))}
+                    categories={categoryOptions}
+                    placeholder="Select category"
+                    required
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label>Start date *</Label>
+                      <Input
+                        type="date"
+                        value={recurringForm.start_date}
+                        onChange={(e) => setRecurringForm((prev) => ({ ...prev, start_date: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>End date *</Label>
+                      <Input
+                        type="date"
+                        value={recurringForm.end_date}
+                        onChange={(e) => setRecurringForm((prev) => ({ ...prev, end_date: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2 md:col-span-3">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+                    <div className="space-y-2">
+                      <Label>Frequency</Label>
+                      <Select
+                        value={recurringForm.frequency}
+                        onValueChange={(value) => setRecurringForm((prev) => ({ ...prev, frequency: value }))}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="weekly">Weekly</SelectItem>
+                          <SelectItem value="monthly">Monthly</SelectItem>
+                          <SelectItem value="yearly">Yearly</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Every</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={recurringForm.interval}
+                        onChange={(e) => setRecurringForm((prev) => ({ ...prev, interval: e.target.value }))}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={recurringForm.cleared}
+                        onChange={(e) => setRecurringForm((prev) => ({ ...prev, cleared: e.target.checked }))}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm text-slate-600">Cleared</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={recurringForm.projected}
+                        onChange={(e) => setRecurringForm((prev) => ({ ...prev, projected: e.target.checked }))}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm text-slate-600">Projected</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2 md:col-span-3">
+                  <Label>Notes</Label>
+                  <Input
+                    value={recurringForm.notes}
+                    onChange={(e) => setRecurringForm((prev) => ({ ...prev, notes: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowRecurringModal(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleCreateRecurringRule}>Create Rule</Button>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-slate-900">Existing Rules</h3>
+              {recurringRules.length === 0 ? (
+                <div className="text-sm text-slate-500">No recurring rules yet.</div>
+              ) : (
+                <div className="space-y-2">
+                  {recurringRules.map((rule) => (
+                    <div
+                      key={rule.id}
+                      className="rounded-lg border border-slate-200 p-3 flex items-center justify-between"
+                    >
+                      <div>
+                        <div className="font-medium text-slate-900 capitalize">
+                          {rule.type} · {rule.category} / {rule.subcategory}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {rule.amount} · {rule.frequency} every {rule.interval} · {rule.start_date} → {rule.end_date}
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        onClick={() => handleDeleteRecurringRule(rule.id)}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={showBulkUpdater} onOpenChange={setShowBulkUpdater}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
@@ -1412,6 +1755,18 @@ export default function Settings() {
                   <div className="flex-1 text-left">
                     <p className="font-medium text-slate-900">Bulk Update Transactions</p>
                     <p className="text-sm text-slate-500">Filter and apply changes to multiple transactions</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => setShowRecurringModal(true)}
+                  className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="p-2 rounded-lg bg-purple-50">
+                    <Palette className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <div className="flex-1 text-left">
+                    <p className="font-medium text-slate-900">Recurring Transactions</p>
+                    <p className="text-sm text-slate-500">Create bills or regular income with rules</p>
                   </div>
                 </button>
               </div>

@@ -102,5 +102,6 @@ export const base44 = {
     Transfer: makeEntity("Transfer"),
     ExpenseCategory: makeEntity("ExpenseCategory"),
     IncomeCategory: makeEntity("IncomeCategory"),
+    RecurringRule: makeEntity("RecurringRule"),
   },
 };
