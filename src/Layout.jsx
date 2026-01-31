@@ -15,12 +15,15 @@ export default function Layout({ children, currentPageName }) {
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50">
-      <div className="flex-1 pb-20">
+      <div className="flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))]">
         {children}
       </div>
       <Toaster position="top-right" richColors closeButton />
       
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-1 py-2 shadow-lg z-50" style={{ height: '5rem' }}>
+      <nav
+        className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-1 py-2 shadow-lg z-50"
+        style={{ height: 'calc(5rem + env(safe-area-inset-bottom))', paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
         <div className="max-w-7xl mx-auto">
           <div className="flex justify-around items-center">
             {navItems.map((item) => {
