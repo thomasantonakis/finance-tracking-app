@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { motion } from 'framer-motion';
@@ -146,6 +146,46 @@ export default function Accounts() {
     },
   });
 
+  const pendingDeletesRef = useRef(new Map());
+
+  const undoDelete = (key) => {
+    const pending = pendingDeletesRef.current.get(key);
+    if (!pending) return;
+    clearTimeout(pending.timeoutId);
+    queryClient.setQueryData(pending.queryKey, pending.previous);
+    pendingDeletesRef.current.delete(key);
+    toast.success('Deletion undone');
+  };
+
+  const scheduleDelete = (id, type) => {
+    const typeKey = type === 'income' ? 'income' : type === 'transfer' ? 'transfers' : 'expenses';
+    const queryKey = [typeKey];
+    const previous = queryClient.getQueryData(queryKey) || [];
+    const item = previous.find((t) => t.id === id);
+    if (!item) {
+      if (type === 'income') deleteIncomeMutation.mutate(id);
+      else if (type === 'transfer') deleteTransferMutation.mutate(id);
+      else deleteExpenseMutation.mutate(id);
+      return;
+    }
+    const key = `${type}:${id}`;
+    if (pendingDeletesRef.current.has(key)) return;
+    queryClient.setQueryData(queryKey, previous.filter((t) => t.id !== id));
+    const timeoutId = setTimeout(() => {
+      pendingDeletesRef.current.delete(key);
+      if (type === 'income') deleteIncomeMutation.mutate(id);
+      else if (type === 'transfer') deleteTransferMutation.mutate(id);
+      else deleteExpenseMutation.mutate(id);
+    }, 8000);
+    pendingDeletesRef.current.set(key, { previous, queryKey, timeoutId });
+    toast.success('Transaction deleted', {
+      action: {
+        label: 'Undo',
+        onClick: () => undoDelete(key),
+      },
+    });
+  };
+
   const handleAccountFormSuccess = () => {
     queryClient.invalidateQueries({ queryKey: ['accounts'] });
     setEditingAccount(null);
@@ -161,13 +201,7 @@ export default function Accounts() {
   };
 
   const handleDelete = (id, type) => {
-    if (type === 'income') {
-      deleteIncomeMutation.mutate(id);
-    } else if (type === 'transfer') {
-      deleteTransferMutation.mutate(id);
-    } else {
-      deleteExpenseMutation.mutate(id);
-    }
+    scheduleDelete(id, type);
   };
 
   const handleUpdate = () => {

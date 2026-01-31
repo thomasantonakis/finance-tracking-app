@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Home, Settings, Calendar, BarChart3, Wallet } from 'lucide-react';
 import { createPageUrl } from './utils';
+import { Toaster } from 'sonner';
 
 export default function Layout({ children, currentPageName }) {
   const navItems = [
@@ -17,6 +18,7 @@ export default function Layout({ children, currentPageName }) {
       <div className="flex-1 pb-20">
         {children}
       </div>
+      <Toaster position="top-right" richColors closeButton />
       
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-1 py-2 shadow-lg z-50" style={{ height: '5rem' }}>
         <div className="max-w-7xl mx-auto">

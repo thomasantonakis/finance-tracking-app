@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { motion } from 'framer-motion';
@@ -84,6 +84,7 @@ export default function Settings() {
     successCount: 0,
     failCount: 0,
   });
+  const pendingBulkDeleteRef = useRef(null);
   const [recurringForm, setRecurringForm] = useState({
     type: 'expense',
     amount: '',
@@ -1032,6 +1033,68 @@ export default function Settings() {
   const handleApplyBulkAction = async () => {
     if (filteredTransactions.length === 0) {
       toast.info('No transactions match the current filters.');
+      return;
+    }
+    if (bulkAction.type === 'delete') {
+      const expensesKey = ['expenses'];
+      const incomeKey = ['income'];
+      const prevExpenses = queryClient.getQueryData(expensesKey) || [];
+      const prevIncome = queryClient.getQueryData(incomeKey) || [];
+      const expenseIds = new Set(filteredTransactions.filter((t) => t.type === 'expense').map((t) => t.id));
+      const incomeIds = new Set(filteredTransactions.filter((t) => t.type === 'income').map((t) => t.id));
+      queryClient.setQueryData(expensesKey, prevExpenses.filter((t) => !expenseIds.has(t.id)));
+      queryClient.setQueryData(incomeKey, prevIncome.filter((t) => !incomeIds.has(t.id)));
+
+      const timeoutId = setTimeout(async () => {
+        pendingBulkDeleteRef.current = null;
+        let successCount = 0;
+        let failCount = 0;
+        setBulkResult({
+          open: true,
+          inProgress: true,
+          successCount: 0,
+          failCount: 0,
+        });
+        for (const tx of filteredTransactions) {
+          const entity = getEntityForType(tx.type);
+          try {
+            await entity.delete(tx.id);
+            successCount += 1;
+          } catch {
+            failCount += 1;
+          }
+        }
+        setBulkResult({
+          open: true,
+          inProgress: false,
+          successCount,
+          failCount,
+        });
+        queryClient.invalidateQueries({ queryKey: ['expenses'] });
+        queryClient.invalidateQueries({ queryKey: ['income'] });
+      }, 8000);
+
+      pendingBulkDeleteRef.current = {
+        timeoutId,
+        prevExpenses,
+        prevIncome,
+      };
+
+      toast.success(`Deleted ${filteredTransactions.length} transactions`, {
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            const pending = pendingBulkDeleteRef.current;
+            if (!pending) return;
+            clearTimeout(pending.timeoutId);
+            queryClient.setQueryData(expensesKey, pending.prevExpenses);
+            queryClient.setQueryData(incomeKey, pending.prevIncome);
+            pendingBulkDeleteRef.current = null;
+            toast.success('Bulk delete undone');
+          },
+        },
+      });
+      setBulkConfirm(false);
       return;
     }
     setBulkProcessing(true);
