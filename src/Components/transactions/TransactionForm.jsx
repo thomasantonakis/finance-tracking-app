@@ -42,7 +42,7 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
     date: initialDate || format(new Date(), 'yyyy-MM-dd'),
     notes: initialData?.notes || '',
     cleared: initialData?.cleared ?? true,
-    projected: initialData?.projected ?? true,
+    projected: initialData?.projected ?? false,
     important: initialData?.important ?? false
   }));
 
@@ -55,7 +55,7 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
       date: initialDate || format(new Date(), 'yyyy-MM-dd'),
       notes: initialData?.notes || '',
       cleared: initialData?.cleared ?? true,
-      projected: initialData?.projected ?? true,
+      projected: initialData?.projected ?? false,
       important: initialData?.important ?? false
     });
   }, [initialData, initialDate, type]);

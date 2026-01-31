@@ -27,7 +27,7 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
     date: initialDate || format(new Date(), 'yyyy-MM-dd'),
     notes: initialData?.notes || '',
     cleared: initialData?.cleared ?? true,
-    projected: initialData?.projected ?? true
+    projected: initialData?.projected ?? false
   }));
 
   React.useEffect(() => {
@@ -39,7 +39,7 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
       date: initialDate || format(new Date(), 'yyyy-MM-dd'),
       notes: initialData?.notes || '',
       cleared: initialData?.cleared ?? true,
-      projected: initialData?.projected ?? true
+      projected: initialData?.projected ?? false
     });
   }, [initialData, initialDate]);
 
