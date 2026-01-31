@@ -107,7 +107,13 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
               <SelectContent>
                 {fromOptions.map((account) => (
                   <SelectItem key={account.id} value={account.id}>
-                    {account.name}
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: account.color }}
+                      />
+                      {account.name}
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -140,7 +146,13 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
               <SelectContent>
                 {toOptions.map((account) => (
                   <SelectItem key={account.id} value={account.id}>
-                    {account.name}
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: account.color }}
+                      />
+                      {account.name}
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>

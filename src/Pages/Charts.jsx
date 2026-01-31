@@ -22,7 +22,7 @@ export default function Charts() {
   const [detailChartMode, setDetailChartMode] = useState('bars');
   const [pieModal, setPieModal] = useState({ open: false, type: 'expense' });
   const [expandedCategory, setExpandedCategory] = useState(null);
-  const [expandedSubcategory, setExpandedSubcategory] = useState(null);
+  const [expandedSubcategories, setExpandedSubcategories] = useState([]);
   const queryClient = useQueryClient();
 
   const { data: expenses = [] } = useQuery({
@@ -571,7 +571,7 @@ export default function Charts() {
                         type="button"
                         onClick={() => {
                           setExpandedCategory(isExpanded ? null : cat.rawName);
-                          setExpandedSubcategory(null);
+                          setExpandedSubcategories([]);
                         }}
                         className={`w-full grid grid-cols-[1.6fr_0.7fr_0.6fr_1fr] gap-3 px-4 py-2 text-left text-sm ${
                           isExpanded ? 'bg-slate-50' : 'hover:bg-slate-50'
@@ -603,13 +603,17 @@ export default function Charts() {
                           ) : (
                             <div className="space-y-2">
                               {subcategoryGroups.map((group) => {
-                                const isSubExpanded = expandedSubcategory === group.name;
+                                const isSubExpanded = expandedSubcategories.includes(group.name);
                                 return (
                                   <div key={group.name} className="rounded-lg border border-slate-200">
                                     <button
                                       type="button"
                                       onClick={() =>
-                                        setExpandedSubcategory(isSubExpanded ? null : group.name)
+                                        setExpandedSubcategories((prev) =>
+                                          prev.includes(group.name)
+                                            ? prev.filter((name) => name !== group.name)
+                                            : [...prev, group.name]
+                                        )
                                       }
                                       className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
                                     >
@@ -619,7 +623,7 @@ export default function Charts() {
                                       </span>
                                     </button>
                                     {isSubExpanded && (
-                                      <div className="px-3 pb-2 space-y-1">
+                                      <div className="px-3 pb-2 space-y-1 max-h-48 overflow-auto">
                                         {group.items.map((t) => (
                                           <div key={t.id} className="flex items-center justify-between text-sm text-slate-600">
                                             <div>
