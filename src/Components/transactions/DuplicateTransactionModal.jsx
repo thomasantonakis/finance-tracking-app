@@ -44,6 +44,7 @@ export default function DuplicateTransactionModal({
           notes: transaction?.notes,
           cleared: transaction?.cleared,
           projected: transaction?.projected,
+          important: transaction?.important,
         };
 
   return (

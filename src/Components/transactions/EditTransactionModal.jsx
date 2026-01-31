@@ -36,7 +36,8 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
     date: transaction?.date || format(new Date(), 'yyyy-MM-dd'),
     notes: transaction?.notes || '',
     cleared: transaction?.cleared ?? true,
-    projected: transaction?.projected ?? true
+    projected: transaction?.projected ?? true,
+    important: transaction?.important ?? false
   });
 
   const { data: accounts = [] } = useQuery({
@@ -55,7 +56,8 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
       date: transaction?.date || format(new Date(), 'yyyy-MM-dd'),
       notes: transaction?.notes || '',
       cleared: transaction?.cleared ?? true,
-      projected: transaction?.projected ?? true
+      projected: transaction?.projected ?? true,
+      important: transaction?.important ?? false
     });
   }, [transaction, type]);
 
@@ -148,7 +150,8 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
       date: formData.date,
       notes: formData.notes || undefined,
       cleared: formData.cleared,
-      projected: formData.projected
+      projected: formData.projected,
+      important: formData.important
     });
     
     toast.success(`${type === 'income' ? 'Income' : 'Expense'} updated successfully`);
@@ -237,6 +240,33 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
                 onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                 required
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Importance</Label>
+              <Select
+                value={formData.important ? 'true' : 'false'}
+                onValueChange={(value) =>
+                  setFormData((prev) => ({ ...prev, important: value === 'true' }))
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {type === 'income' ? (
+                    <>
+                      <SelectItem value="true">Main</SelectItem>
+                      <SelectItem value="false">Extras</SelectItem>
+                    </>
+                  ) : (
+                    <>
+                      <SelectItem value="true">Must Have</SelectItem>
+                      <SelectItem value="false">Nice to Have</SelectItem>
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">

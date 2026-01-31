@@ -49,6 +49,11 @@
       "type": "boolean",
       "default": false,
       "description": "Whether transaction is projected"
+    },
+    "important": {
+      "type": "boolean",
+      "default": false,
+      "description": "Importance flag"
     }
   },
   "required": [

@@ -39,6 +39,26 @@ export default function DayTransactions({
     setDuplicatingType(type);
   };
 
+  const getImportanceLabel = (t) => {
+    if (t.type === 'income') return t.important ? 'Main' : 'Extras';
+    if (t.type === 'expense') return t.important ? 'Must Have' : 'Nice to Have';
+    return null;
+  };
+
+  const ImportanceEmoji = ({ transaction }) => {
+    if (transaction.type === 'transfer') return null;
+    const label = getImportanceLabel(transaction);
+    if (!label) return null;
+    const emoji = transaction.type === 'income'
+      ? (transaction.important ? '🔁' : '✨')
+      : (transaction.important ? '🍞' : '🎉');
+    return (
+      <span className="inline-flex items-center text-sm" title={label}>
+        {emoji}
+      </span>
+    );
+  };
+
   const dayExpenses = expenses.filter(e => isSameDay(new Date(e.date), selectedDate));
   const dayIncome = income.filter(i => isSameDay(new Date(i.date), selectedDate));
   const dayTransfers = transfers.filter(t => isSameDay(new Date(t.date), selectedDate));
@@ -114,30 +134,30 @@ export default function DayTransactions({
                       <p className="text-xs text-slate-500 truncate">
                         {getAccountName(transaction.from_account_id)} → {getAccountName(transaction.to_account_id)}
                       </p>
-                      {transaction.cleared === false && (
-                        <span className="inline-flex items-center text-amber-600" title="Not cleared">
-                          <AlertCircle className="w-3.5 h-3.5" />
-                        </span>
-                      )}
+                      <ImportanceEmoji transaction={transaction} />
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
-                      <p className="font-medium text-slate-900 text-sm capitalize">
+                      <p className="font-semibold text-slate-900 text-sm capitalize">
                         {transaction.category}
                       </p>
                       {transaction.subcategory && (
                         <>
                           <span className="text-slate-300">•</span>
-                          <p className="text-xs text-slate-500 truncate">
+                          <p className="text-xs font-semibold text-slate-600 truncate">
                             {transaction.subcategory}
                           </p>
                         </>
                       )}
-                      {transaction.cleared === false && (
-                        <span className="inline-flex items-center text-amber-600" title="Not cleared">
-                          <AlertCircle className="w-3.5 h-3.5" />
-                        </span>
-                      )}
+                      <span className="text-slate-300">•</span>
+                      <ImportanceEmoji transaction={transaction} />
+                    </div>
+                  )}
+                  {transaction.cleared === false && (
+                    <div className="mt-0.5">
+                      <span className="inline-flex items-center text-amber-600" title="Not cleared">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                      </span>
                     </div>
                   )}
                   {transaction.notes && (

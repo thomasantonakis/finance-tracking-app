@@ -42,7 +42,8 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
     date: initialDate || format(new Date(), 'yyyy-MM-dd'),
     notes: initialData?.notes || '',
     cleared: initialData?.cleared ?? true,
-    projected: initialData?.projected ?? true
+    projected: initialData?.projected ?? true,
+    important: initialData?.important ?? false
   }));
 
   React.useEffect(() => {
@@ -54,7 +55,8 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
       date: initialDate || format(new Date(), 'yyyy-MM-dd'),
       notes: initialData?.notes || '',
       cleared: initialData?.cleared ?? true,
-      projected: initialData?.projected ?? true
+      projected: initialData?.projected ?? true,
+      important: initialData?.important ?? false
     });
   }, [initialData, initialDate, type]);
 
@@ -186,7 +188,8 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
       date: formData.date,
       notes: formData.notes || undefined,
       cleared: formData.cleared,
-      projected: formData.projected
+      projected: formData.projected,
+      important: formData.important
     });
     
     toast.success(`${type === 'income' ? 'Income' : 'Expense'} added successfully`);
@@ -281,6 +284,33 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
             onChange={(e) => setFormData({ ...formData, date: e.target.value })}
             required
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Importance</Label>
+          <Select
+            value={formData.important ? 'true' : 'false'}
+            onValueChange={(value) =>
+              setFormData((prev) => ({ ...prev, important: value === 'true' }))
+            }
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {type === 'income' ? (
+                <>
+                  <SelectItem value="true">Main</SelectItem>
+                  <SelectItem value="false">Extras</SelectItem>
+                </>
+              ) : (
+                <>
+                  <SelectItem value="true">Must Have</SelectItem>
+                  <SelectItem value="false">Nice to Have</SelectItem>
+                </>
+              )}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="space-y-2">

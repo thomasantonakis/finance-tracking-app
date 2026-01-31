@@ -38,6 +38,26 @@ export default function RecentTransactions({ transactions, onDelete, onUpdate })
     return account ? account.name : 'Unknown';
   };
 
+  const getImportanceLabel = (t) => {
+    if (t.type === 'income') return t.important ? 'Main' : 'Extras';
+    if (t.type === 'expense') return t.important ? 'Must Have' : 'Nice to Have';
+    return null;
+  };
+
+  const ImportanceEmoji = ({ transaction }) => {
+    if (transaction.type === 'transfer') return null;
+    const label = getImportanceLabel(transaction);
+    if (!label) return null;
+    const emoji = transaction.type === 'income'
+      ? (transaction.important ? '🔁' : '✨')
+      : (transaction.important ? '🍞' : '🎉');
+    return (
+      <span className="inline-flex items-center text-sm" title={label}>
+        {emoji}
+      </span>
+    );
+  };
+
   if (!transactions || transactions.length === 0) {
     return (
       <div className="bg-white rounded-2xl p-6 border border-slate-100">
@@ -93,17 +113,19 @@ export default function RecentTransactions({ transactions, onDelete, onUpdate })
                     </>
                   ) : (
                     <>
-                      <p className="font-medium text-slate-900 capitalize">
+                      <p className="font-semibold text-slate-900 capitalize">
                         {transaction.category}
                       </p>
                       {transaction.subcategory && (
                         <>
                           <span className="text-slate-300">•</span>
-                          <p className="text-sm text-slate-500 truncate">
+                          <p className="text-sm font-semibold text-slate-600 truncate">
                             {transaction.subcategory}
                           </p>
                         </>
                       )}
+                      <span className="text-slate-300">•</span>
+                      <ImportanceEmoji transaction={transaction} />
                     </>
                   )}
                 </div>

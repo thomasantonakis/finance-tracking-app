@@ -150,6 +150,42 @@ export default function Charts() {
         }
       }).reduce((sum, i) => sum + i.amount, 0);
 
+      const periodIncomeImportant = filteredIncome.filter(i => {
+        const incomeDate = new Date(i.date);
+        const samePeriod =
+          viewMode === 'days'
+            ? format(incomeDate, 'yyyy-MM-dd') === format(period.date, 'yyyy-MM-dd')
+            : format(incomeDate, 'yyyy-MM') === format(period.date, 'yyyy-MM');
+        return samePeriod && i.important === true;
+      }).reduce((sum, i) => sum + i.amount, 0);
+
+      const periodIncomeOther = filteredIncome.filter(i => {
+        const incomeDate = new Date(i.date);
+        const samePeriod =
+          viewMode === 'days'
+            ? format(incomeDate, 'yyyy-MM-dd') === format(period.date, 'yyyy-MM-dd')
+            : format(incomeDate, 'yyyy-MM') === format(period.date, 'yyyy-MM');
+        return samePeriod && i.important !== true;
+      }).reduce((sum, i) => sum + i.amount, 0);
+
+      const periodExpensesImportant = filteredExpenses.filter(e => {
+        const expenseDate = new Date(e.date);
+        const samePeriod =
+          viewMode === 'days'
+            ? format(expenseDate, 'yyyy-MM-dd') === format(period.date, 'yyyy-MM-dd')
+            : format(expenseDate, 'yyyy-MM') === format(period.date, 'yyyy-MM');
+        return samePeriod && e.important === true;
+      }).reduce((sum, e) => sum + e.amount, 0);
+
+      const periodExpensesOther = filteredExpenses.filter(e => {
+        const expenseDate = new Date(e.date);
+        const samePeriod =
+          viewMode === 'days'
+            ? format(expenseDate, 'yyyy-MM-dd') === format(period.date, 'yyyy-MM-dd')
+            : format(expenseDate, 'yyyy-MM') === format(period.date, 'yyyy-MM');
+        return samePeriod && e.important !== true;
+      }).reduce((sum, e) => sum + e.amount, 0);
+
       // Calculate cumulative net worth (balance over time)
       const networth = cumulativeBalance + upToDateIncome - upToDateExpenses + upToDateTransferNet;
 
@@ -158,6 +194,10 @@ export default function Charts() {
         fullName: period.fullLabel,
         income: periodIncome,
         expenses: periodExpenses,
+        incomeImportant: periodIncomeImportant,
+        incomeOther: periodIncomeOther,
+        expensesImportant: periodExpensesImportant,
+        expensesOther: periodExpensesOther,
         networth: networth
       };
     });
@@ -193,20 +233,36 @@ export default function Charts() {
   const barChartData = useMemo(() => {
     let cumIncome = 0;
     let cumExpenses = 0;
+    let cumIncomeImportant = 0;
+    let cumIncomeOther = 0;
+    let cumExpensesImportant = 0;
+    let cumExpensesOther = 0;
     return lineChartData.map((point) => {
       if (!showCumulativeBars) {
         return {
           ...point,
           income: point.income,
           expenses: point.expenses,
+          incomeImportant: point.incomeImportant,
+          incomeOther: point.incomeOther,
+          expensesImportant: point.expensesImportant,
+          expensesOther: point.expensesOther,
         };
       }
       cumIncome += point.income;
       cumExpenses += point.expenses;
+      cumIncomeImportant += point.incomeImportant;
+      cumIncomeOther += point.incomeOther;
+      cumExpensesImportant += point.expensesImportant;
+      cumExpensesOther += point.expensesOther;
       return {
         ...point,
         income: cumIncome,
         expenses: cumExpenses,
+        incomeImportant: cumIncomeImportant,
+        incomeOther: cumIncomeOther,
+        expensesImportant: cumExpensesImportant,
+        expensesOther: cumExpensesOther,
       };
     });
   }, [lineChartData, showCumulativeBars]);
@@ -417,10 +473,20 @@ export default function Charts() {
                   <Tooltip
                     formatter={(value) => `€${formatAmount(value)}`}
                     labelFormatter={(label, payload) => payload[0]?.payload?.fullName || label}
+                    itemSorter={(item) => {
+                      const order = {
+                        incomeImportant: 0,
+                        incomeOther: 1,
+                        expensesImportant: 2,
+                        expensesOther: 3,
+                      };
+                      return order[item.dataKey] ?? 99;
+                    }}
                   />
-                  <Legend />
-                  <Bar dataKey="income" fill="#10b981" name="Income" />
-                  <Bar dataKey="expenses" fill="#ef4444" name="Expenses" />
+                  <Bar dataKey="incomeImportant" stackId="income" fill="#10b981" name="Income (Regular)" />
+                  <Bar dataKey="incomeOther" stackId="income" fill="#8ee3c2" name="Income (Extra)" />
+                  <Bar dataKey="expensesImportant" stackId="expenses" fill="#ef4444" name="Expense (Need)" />
+                  <Bar dataKey="expensesOther" stackId="expenses" fill="#f59f9f" name="Expense (Want)" />
                 </BarChart>
               ) : (
                 <LineChart data={barChartData}>
@@ -431,12 +497,29 @@ export default function Charts() {
                     formatter={(value) => `€${formatAmount(value)}`}
                     labelFormatter={(label, payload) => payload[0]?.payload?.fullName || label}
                   />
-                  <Legend />
                   <Line type="monotone" dataKey="income" stroke="#10b981" strokeWidth={2} name="Income" />
                   <Line type="monotone" dataKey="expenses" stroke="#ef4444" strokeWidth={2} name="Expenses" />
                 </LineChart>
               )}
             </ResponsiveContainer>
+            <div className="flex flex-wrap justify-center gap-4 text-sm mt-2">
+              <span className="flex items-center gap-2 text-slate-600">
+                <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: '#10b981' }} />
+                Income (Regular)
+              </span>
+              <span className="flex items-center gap-2 text-slate-600">
+                <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: '#8ee3c2' }} />
+                Income (Extra)
+              </span>
+              <span className="flex items-center gap-2 text-slate-600">
+                <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: '#ef4444' }} />
+                Expense (Need)
+              </span>
+              <span className="flex items-center gap-2 text-slate-600">
+                <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: '#f59f9f' }} />
+                Expense (Want)
+              </span>
+            </div>
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">

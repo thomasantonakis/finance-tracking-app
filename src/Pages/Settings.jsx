@@ -359,7 +359,7 @@ export default function Settings() {
   const handleExport = () => {
     // Combine all transactions into CSV format
     const rows = [
-      ['Type', 'Date', 'Amount', 'Account', 'Category', 'Subcategory', 'Notes', 'Cleared', 'Projected']
+      ['Type', 'Date', 'Amount', 'Account', 'Category', 'Subcategory', 'Notes', 'Cleared', 'Projected', 'Important']
     ];
 
     const isStartingBalance = (t) => (t.category || '').toLowerCase() === 'starting balance';
@@ -376,7 +376,8 @@ export default function Settings() {
         e.subcategory || '',
         e.notes || '',
         e.cleared ? 'yes' : 'no',
-        e.projected ? 'yes' : 'no'
+        e.projected ? 'yes' : 'no',
+        e.important ? 'yes' : 'no'
       ]);
     });
 
@@ -392,7 +393,8 @@ export default function Settings() {
         i.subcategory || '',
         i.notes || '',
         i.cleared ? 'yes' : 'no',
-        i.projected ? 'yes' : 'no'
+        i.projected ? 'yes' : 'no',
+        i.important ? 'yes' : 'no'
       ]);
     });
 
@@ -407,8 +409,9 @@ export default function Settings() {
         toAccount?.name || '',
         '',
         t.notes || '',
-        '',
-        ''
+        t.cleared ? 'yes' : 'no',
+        t.projected ? 'yes' : 'no',
+        'no'
       ]);
     });
 
@@ -425,7 +428,8 @@ export default function Settings() {
         '',
         'starting balance',
         'yes',
-        'yes'
+        'yes',
+        'no'
       ]);
     });
 
@@ -442,11 +446,11 @@ export default function Settings() {
 
   const handleDownloadTemplate = () => {
     const rows = [
-      ['Type', 'Date', 'Amount', 'Account', 'Category', 'Subcategory', 'Notes', 'Cleared', 'Projected'],
-      ['expense', '2026-01-01', '50.12', 'Cash', 'food', 'groceries', 'Weekly shopping', 'yes', 'no'],
-      ['income', '2026-01-01', '1234.56', 'Bank', 'salary', '', 'Monthly salary', 'yes', 'no'],
-      ['transfer', '2026-01-01', '200.75', 'Bank', 'Savings', '', 'Monthly savings', 'yes', 'no'],
-      ['income', '1970-01-01', '1000.00', 'Bank', 'SYSTEM - Starting Balance', '', 'starting balance', 'yes', 'yes']
+      ['Type', 'Date', 'Amount', 'Account', 'Category', 'Subcategory', 'Notes', 'Cleared', 'Projected', 'Important'],
+      ['expense', '2026-01-01', '50.12', 'Cash', 'food', 'groceries', 'Weekly shopping', 'yes', 'no', 'yes'],
+      ['income', '2026-01-01', '1234.56', 'Bank', 'salary', '', 'Monthly salary', 'yes', 'no', 'yes'],
+      ['transfer', '2026-01-01', '200.75', 'Bank', 'Savings', '', 'Monthly savings', 'yes', 'no', 'no'],
+      ['income', '1970-01-01', '1000.00', 'Bank', 'SYSTEM - Starting Balance', '', 'starting balance', 'yes', 'yes', 'no']
     ];
 
     const csv = rows.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
@@ -669,7 +673,7 @@ export default function Settings() {
         return;
       }
 
-      const expectedHeaders = ['Type', 'Date', 'Amount', 'Account', 'Category', 'Subcategory', 'Notes', 'Cleared', 'Projected'];
+      const expectedHeaders = ['Type', 'Date', 'Amount', 'Account', 'Category', 'Subcategory', 'Notes', 'Cleared', 'Projected', 'Important'];
       const headerRow = rows[0].map((cell) => (cell || '').trim());
       const headerMatches =
         headerRow.length === expectedHeaders.length &&
@@ -712,6 +716,7 @@ export default function Settings() {
         const subcategory = (row[5] || '').trim();
         const cleared = (row[7] || '').trim().toLowerCase();
         const projected = (row[8] || '').trim().toLowerCase();
+        const important = (row[9] || '').trim().toLowerCase();
 
         const isSystemStartingBalance = category.toLowerCase() === 'system - starting balance';
 
@@ -740,6 +745,9 @@ export default function Settings() {
         }
         if (projected !== 'yes' && projected !== 'no') {
           validationErrors.push(`Row ${rowNumber}: Projected must be "yes" or "no"`);
+        }
+        if (important !== 'yes' && important !== 'no') {
+          validationErrors.push(`Row ${rowNumber}: Important must be "yes" or "no"`);
         }
 
         if (type === 'transfer' && !category) {
@@ -796,6 +804,7 @@ export default function Settings() {
           const notes = row[6] || undefined;
           const cleared = row[7]?.trim().toLowerCase() === 'yes';
           const projected = row[8]?.trim().toLowerCase() === 'yes';
+          const important = row[9]?.trim().toLowerCase() === 'yes';
           const isSystemStartingBalance =
             (category || '').toLowerCase() === 'system - starting balance';
 
@@ -846,7 +855,8 @@ export default function Settings() {
               date,
               notes,
               cleared,
-              projected
+              projected,
+              important
             });
             imported++;
           } else if (type === 'income') {
@@ -882,7 +892,8 @@ export default function Settings() {
               date,
               notes,
               cleared,
-              projected
+              projected,
+              important
             });
             imported++;
           } else if (type === 'transfer') {
@@ -1689,10 +1700,11 @@ export default function Settings() {
                       <SelectTrigger className="w-full">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="cleared">Cleared</SelectItem>
-                        <SelectItem value="projected">Projected</SelectItem>
-                      </SelectContent>
+                        <SelectContent>
+                          <SelectItem value="cleared">Cleared</SelectItem>
+                          <SelectItem value="projected">Projected</SelectItem>
+                          <SelectItem value="important">Important</SelectItem>
+                        </SelectContent>
                     </Select>
                   </div>
                   <div>
@@ -1974,7 +1986,7 @@ export default function Settings() {
                         Use the provided CSV template exactly. Headers and column order must remain unchanged.
                       </p>
                       <p>
-                        <span className="font-medium">Type</span>: must be one of <code className="px-1">expense</code>, <code className="px-1">income</code>, or <code className="px-1">transfer</code> (lowercase).
+                        <span className="font-medium">Type</span>: must be one of <code className="px-1">expense</code>, <code className="px-1">income</code>, or <code className="px-1">transfer</code> (case-insensitive).
                       </p>
                       <p>
                         <span className="font-medium">Date</span>: must be in <code className="px-1">YYYY-MM-DD</code> format.
@@ -1989,7 +2001,10 @@ export default function Settings() {
                         <span className="font-medium">Notes</span>: can include commas or new lines if the value is quoted.
                       </p>
                       <p>
-                        <span className="font-medium">Cleared / Projected</span>: must be <code className="px-1">yes</code> or <code className="px-1">no</code> (lowercase).
+                        <span className="font-medium">Cleared / Projected</span>: must be <code className="px-1">yes</code> or <code className="px-1">no</code> (case-insensitive).
+                      </p>
+                      <p>
+                        <span className="font-medium">Important</span>: must be <code className="px-1">yes</code> or <code className="px-1">no</code> (case-insensitive). Expenses show <em>Must Have</em> vs <em>Nice to Have</em>; income shows <em>Main</em> vs <em>Extras</em>.
                       </p>
                       <p>
                         <span className="font-medium">Starting Balance</span>: use category <code className="px-1">SYSTEM - Starting Balance</code> on an income or expense row. If balance is 0, omit it.

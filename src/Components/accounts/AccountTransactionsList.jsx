@@ -79,6 +79,26 @@ export default function AccountTransactionsList({
     setDuplicatingType(type);
   };
 
+  const getImportanceLabel = (t) => {
+    if (t.type === 'income') return t.important ? 'Main' : 'Extras';
+    if (t.type === 'expense') return t.important ? 'Must Have' : 'Nice to Have';
+    return null;
+  };
+
+  const ImportanceEmoji = ({ transaction }) => {
+    if (transaction.type === 'transfer') return null;
+    const label = getImportanceLabel(transaction);
+    if (!label) return null;
+    const emoji = transaction.type === 'income'
+      ? (transaction.important ? '🔁' : '✨')
+      : (transaction.important ? '🍞' : '🎉');
+    return (
+      <span className="inline-flex items-center text-sm" title={label}>
+        {emoji}
+      </span>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {sortedMonths.map(monthKey => (
@@ -122,15 +142,6 @@ export default function AccountTransactionsList({
                     
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
-                        <p className="text-xs text-slate-400">
-                          {format(parseISO(transaction.date), 'MMM d')}
-                        </p>
-                        {transaction.cleared === false && (
-                          <span className="inline-flex items-center text-amber-600" title="Not cleared">
-                            <AlertCircle className="w-3.5 h-3.5" />
-                          </span>
-                        )}
-                        <span className="text-slate-300">•</span>
                         {transaction.type === 'transfer' ? (
                           <p className="font-medium text-slate-900 text-sm">
                             {transaction.from_account_id === selectedAccount
@@ -145,8 +156,22 @@ export default function AccountTransactionsList({
                         {transaction.subcategory && (
                           <>
                             <span className="text-slate-300">•</span>
-                            <p className="text-xs text-slate-500 truncate">{transaction.subcategory}</p>
+                            <p className="text-xs font-semibold text-slate-600 truncate">{transaction.subcategory}</p>
                           </>
+                        )}
+                        {transaction.type !== 'transfer' && (
+                          <>
+                            <span className="text-slate-300">•</span>
+                            <ImportanceEmoji transaction={transaction} />
+                          </>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-slate-400">
+                        <span>{format(parseISO(transaction.date), 'MMM d')}</span>
+                        {transaction.cleared === false && (
+                          <span className="inline-flex items-center text-amber-600" title="Not cleared">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                          </span>
                         )}
                       </div>
                       {transaction.notes && (
