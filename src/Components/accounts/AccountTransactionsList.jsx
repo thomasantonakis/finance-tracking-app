@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { format, parseISO, startOfMonth } from 'date-fns';
-import { ArrowUpRight, ArrowDownRight, ArrowLeftRight, Edit, Trash2, Copy } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, ArrowLeftRight, Edit, Trash2, Copy, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import EditTransactionModal from '../transactions/EditTransactionModal';
 import EditTransferModal from '../transactions/EditTransferModal';
@@ -125,6 +125,11 @@ export default function AccountTransactionsList({
                         <p className="text-xs text-slate-400">
                           {format(parseISO(transaction.date), 'MMM d')}
                         </p>
+                        {transaction.cleared === false && (
+                          <span className="inline-flex items-center text-amber-600" title="Not cleared">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                          </span>
+                        )}
                         <span className="text-slate-300">•</span>
                         {transaction.type === 'transfer' ? (
                           <p className="font-medium text-slate-900 text-sm">

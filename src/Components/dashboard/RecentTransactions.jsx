@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, Edit, ArrowUpRight, ArrowDownRight, ArrowLeftRight, Copy } from 'lucide-react';
+import { Trash2, Edit, ArrowUpRight, ArrowDownRight, ArrowLeftRight, Copy, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
@@ -107,9 +107,14 @@ export default function RecentTransactions({ transactions, onDelete, onUpdate })
                     </>
                   )}
                 </div>
-                <p className="text-xs text-slate-400">
-                  {format(new Date(transaction.date), 'MMM d, yyyy')}
-                </p>
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <span>{format(new Date(transaction.date), 'MMM d, yyyy')}</span>
+                  {transaction.cleared === false && (
+                    <span className="inline-flex items-center gap-1 text-amber-600" title="Not cleared">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center gap-2">

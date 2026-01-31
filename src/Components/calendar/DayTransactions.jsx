@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { format, isSameDay } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowUpRight, ArrowDownRight, ArrowLeftRight, Trash2, Edit, Copy } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, ArrowLeftRight, Trash2, Edit, Copy, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import EditTransactionModal from '../transactions/EditTransactionModal';
 import EditTransferModal from '../transactions/EditTransferModal';
@@ -114,6 +114,11 @@ export default function DayTransactions({
                       <p className="text-xs text-slate-500 truncate">
                         {getAccountName(transaction.from_account_id)} → {getAccountName(transaction.to_account_id)}
                       </p>
+                      {transaction.cleared === false && (
+                        <span className="inline-flex items-center text-amber-600" title="Not cleared">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                        </span>
+                      )}
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
@@ -127,6 +132,11 @@ export default function DayTransactions({
                             {transaction.subcategory}
                           </p>
                         </>
+                      )}
+                      {transaction.cleared === false && (
+                        <span className="inline-flex items-center text-amber-600" title="Not cleared">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                        </span>
                       )}
                     </div>
                   )}

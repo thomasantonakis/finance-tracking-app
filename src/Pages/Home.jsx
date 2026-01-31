@@ -226,6 +226,8 @@ export default function Home() {
     ...transfers.map(t => ({ ...t, type: 'transfer' }))
   ]
     .filter((t) => t.type === 'transfer' || !isSystemStarting(t))
+    .filter((t) => t.projected !== true)
+    .filter((t) => new Date(t.date) <= today)
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 10);
 
