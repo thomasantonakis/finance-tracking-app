@@ -702,19 +702,20 @@ export default function Settings() {
 
       data.forEach((row, i) => {
         const rowNumber = i + 2;
-        const type = (row[0] || '').trim();
+        const typeRaw = (row[0] || '').trim();
+        const type = typeRaw.toLowerCase();
         const date = (row[1] || '').trim();
         const amountStr = (row[2] || '').trim();
         const accountName = (row[3] || '').trim();
         const category = (row[4] || '').trim();
         const subcategory = (row[5] || '').trim();
-        const cleared = (row[7] || '').trim();
-        const projected = (row[8] || '').trim();
+        const cleared = (row[7] || '').trim().toLowerCase();
+        const projected = (row[8] || '').trim().toLowerCase();
 
         const isSystemStartingBalance = category.toLowerCase() === 'system - starting balance';
 
         if (!['expense', 'income', 'transfer'].includes(type)) {
-          validationErrors.push(`Row ${rowNumber}: Invalid type "${type}" (must be expense, income, or transfer)`);
+          validationErrors.push(`Row ${rowNumber}: Invalid type "${typeRaw}" (must be expense, income, or transfer)`);
         }
         if (!isValidDateString(date)) {
           validationErrors.push(`Row ${rowNumber}: Invalid date "${date}" (must be YYYY-MM-DD)`);
@@ -785,15 +786,15 @@ export default function Settings() {
         const rowNumber = i + 2;
         
         try {
-          const type = row[0]?.trim();
+          const type = row[0]?.trim().toLowerCase();
           const date = row[1]?.trim();
           const amount = parseFloat(row[2]);
           const accountName = row[3]?.trim();
           const category = row[4]?.trim();
           const subcategory = row[5]?.trim() || undefined;
           const notes = row[6] || undefined;
-          const cleared = row[7]?.trim() === 'yes';
-          const projected = row[8]?.trim() === 'yes';
+          const cleared = row[7]?.trim().toLowerCase() === 'yes';
+          const projected = row[8]?.trim().toLowerCase() === 'yes';
           const isSystemStartingBalance =
             (category || '').toLowerCase() === 'system - starting balance';
 
