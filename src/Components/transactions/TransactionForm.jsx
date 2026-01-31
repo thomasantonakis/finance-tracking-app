@@ -151,139 +151,143 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      <div className="space-y-2">
-        <Label htmlFor="amount">Amount *</Label>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium">€</span>
+    <form onSubmit={handleSubmit} className="flex flex-col max-h-[70vh]">
+      <div className="flex-1 overflow-auto space-y-5 pr-1 pb-20">
+        <div className="space-y-2">
+          <Label htmlFor="subcategory">Subcategory</Label>
           <Input
-            id="amount"
-            type="number"
-            step="0.01"
-            min="0"
-            placeholder="0.00"
-            className="pl-7 text-lg"
-            value={formData.amount}
-            onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+            id="subcategory"
+            placeholder="e.g., Groceries, Gas, etc."
+            value={formData.subcategory}
+            onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
+          />
+        </div>
+
+        <CategoryCombobox
+          id="category"
+          label={`${categoryLabels[type]} *`}
+          value={formData.category}
+          onChange={(value) => setFormData({ ...formData, category: value })}
+          categories={categories}
+          placeholder={`Select ${type} category`}
+          required
+        />
+
+        <div className="space-y-2">
+          <Label htmlFor="amount">Amount *</Label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium">€</span>
+            <Input
+              id="amount"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="0.00"
+              className="pl-7 text-lg"
+              value={formData.amount}
+              onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+              required
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="account">Account *</Label>
+          <Select
+            value={formData.account_id}
+            onValueChange={(value) => setFormData({ ...formData, account_id: value })}
+            required
+            className="w-full"
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select account" />
+            </SelectTrigger>
+            <SelectContent>
+              {orderedAccounts.map((account) => (
+                <SelectItem key={account.id} value={account.id} label={account.name}>
+                  <div className="flex items-center gap-2">
+                    <div 
+                      className="w-3 h-3 rounded-full" 
+                      style={{ backgroundColor: account.color }}
+                    />
+                    {account.name}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="date">Date *</Label>
+          <Input
+            id="date"
+            type="date"
+            value={formData.date}
+            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
             required
           />
         </div>
-      </div>
 
-      <CategoryCombobox
-        id="category"
-        label={`${categoryLabels[type]} *`}
-        value={formData.category}
-        onChange={(value) => setFormData({ ...formData, category: value })}
-        categories={categories}
-        placeholder={`Select ${type} category`}
-        required
-      />
-
-      <div className="space-y-2">
-        <Label htmlFor="subcategory">Subcategory</Label>
-        <Input
-          id="subcategory"
-          placeholder="e.g., Groceries, Gas, etc."
-          value={formData.subcategory}
-          onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="account">Account *</Label>
-        <Select
-          value={formData.account_id}
-          onValueChange={(value) => setFormData({ ...formData, account_id: value })}
-          required
-          className="w-full"
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select account" />
-          </SelectTrigger>
-          <SelectContent>
-            {orderedAccounts.map((account) => (
-              <SelectItem key={account.id} value={account.id} label={account.name}>
-                <div className="flex items-center gap-2">
-                  <div 
-                    className="w-3 h-3 rounded-full" 
-                    style={{ backgroundColor: account.color }}
-                  />
-                  {account.name}
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="date">Date *</Label>
-        <Input
-          id="date"
-          type="date"
-          value={formData.date}
-          onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-          required
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="notes">Notes</Label>
-        <Textarea
-          id="notes"
-          placeholder="Add any additional details..."
-          rows={3}
-          value={formData.notes}
-          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-        />
-      </div>
-
-      <div className="flex gap-4">
-        <div className="flex items-center space-x-2">
-          <input
-            type="checkbox"
-            id="cleared"
-            checked={formData.cleared}
-            onChange={(e) => setFormData({ ...formData, cleared: e.target.checked })}
-            className="w-4 h-4 rounded border-slate-300"
+        <div className="space-y-2">
+          <Label htmlFor="notes">Notes</Label>
+          <Textarea
+            id="notes"
+            placeholder="Add any additional details..."
+            rows={3}
+            value={formData.notes}
+            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
           />
-          <Label htmlFor="cleared" className="font-normal cursor-pointer">Cleared</Label>
         </div>
 
-        <div className="flex items-center space-x-2">
-          <input
-            type="checkbox"
-            id="projected"
-            checked={formData.projected}
-            onChange={(e) => setFormData({ ...formData, projected: e.target.checked })}
-            className="w-4 h-4 rounded border-slate-300"
-          />
-          <Label htmlFor="projected" className="font-normal cursor-pointer">Projected</Label>
+        <div className="flex gap-4">
+          <div className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              id="cleared"
+              checked={formData.cleared}
+              onChange={(e) => setFormData({ ...formData, cleared: e.target.checked })}
+              className="w-4 h-4 rounded border-slate-300"
+            />
+            <Label htmlFor="cleared" className="font-normal cursor-pointer">Cleared</Label>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              id="projected"
+              checked={formData.projected}
+              onChange={(e) => setFormData({ ...formData, projected: e.target.checked })}
+              className="w-4 h-4 rounded border-slate-300"
+            />
+            <Label htmlFor="projected" className="font-normal cursor-pointer">Projected</Label>
+          </div>
         </div>
       </div>
 
-      <div className="flex gap-3 pt-2">
-        <Button
-          type="button"
-          variant="outline"
-          className="flex-1"
-          onClick={onCancel}
-          disabled={loading}
-        >
-          Cancel
-        </Button>
-        <Button
-          type="submit"
-          className={`flex-1 ${
-            type === 'income' 
-              ? 'bg-green-500 hover:bg-green-600' 
-              : 'bg-red-500 hover:bg-red-600'
-          }`}
-          disabled={loading}
-        >
-          {loading ? 'Adding...' : 'Add'}
-        </Button>
+      <div className="sticky bottom-0 bg-white pt-3">
+        <div className="flex gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="flex-1"
+            onClick={onCancel}
+            disabled={loading}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            className={`flex-1 ${
+              type === 'income' 
+                ? 'bg-green-500 hover:bg-green-600' 
+                : 'bg-red-500 hover:bg-red-600'
+            }`}
+            disabled={loading}
+          >
+            {loading ? 'Adding...' : 'Add'}
+          </Button>
+        </div>
       </div>
     </form>
   );

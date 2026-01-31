@@ -14,10 +14,22 @@
       "type": "string",
       "description": "Destination account"
     },
+    "subcategory": {
+      "type": "string",
+      "description": "Optional subcategory label"
+    },
     "date": {
       "type": "string",
       "format": "date",
       "description": "Date of transfer"
+    },
+    "cleared": {
+      "type": "boolean",
+      "description": "Whether the transfer is cleared"
+    },
+    "projected": {
+      "type": "boolean",
+      "description": "Whether the transfer is projected"
     },
     "notes": {
       "type": "string",

@@ -20,13 +20,15 @@ import { base44 } from '@/api/base44Client';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { sortAccountsByOrder } from '@/utils';
+import { ArrowRight } from 'lucide-react';
 
 export default function EditTransferModal({ open, onOpenChange, transfer, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
-    amount: transfer?.amount?.toString() || '',
     from_account_id: transfer?.from_account_id || '',
     to_account_id: transfer?.to_account_id || '',
+    amount: transfer?.amount?.toString() || '',
+    subcategory: transfer?.subcategory || '',
     date: transfer?.date || '',
     notes: transfer?.notes || '',
     cleared: transfer?.cleared ?? true,
@@ -38,6 +40,9 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
     queryFn: () => base44.entities.Account.list(),
   });
   const orderedAccounts = sortAccountsByOrder(accounts);
+  const fromOptions = orderedAccounts.filter((account) => account.id !== formData.to_account_id);
+  const toOptions = orderedAccounts.filter((account) => account.id !== formData.from_account_id);
+  const sameAccountError = formData.from_account_id && formData.to_account_id && formData.from_account_id === formData.to_account_id;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -58,6 +63,7 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
       amount: parseFloat(formData.amount),
       from_account_id: formData.from_account_id,
       to_account_id: formData.to_account_id,
+      subcategory: formData.subcategory || undefined,
       date: formData.date,
       notes: formData.notes || undefined,
       cleared: formData.cleared,
@@ -82,6 +88,66 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
+            <Label htmlFor="from">From Account *</Label>
+            <Select
+              value={formData.from_account_id}
+              onValueChange={(value) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  from_account_id: value,
+                  to_account_id: prev.to_account_id === value ? '' : prev.to_account_id
+                }))
+              }
+              required
+              className="w-full"
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {fromOptions.map((account) => (
+                  <SelectItem key={account.id} value={account.id}>
+                    {account.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex justify-center">
+            <div className="p-2 bg-slate-100 rounded-full">
+              <ArrowRight className="w-5 h-5 text-slate-600" />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="to">To Account *</Label>
+            <Select
+              value={formData.to_account_id}
+              onValueChange={(value) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  to_account_id: value,
+                  from_account_id: prev.from_account_id === value ? '' : prev.from_account_id
+                }))
+              }
+              required
+              className="w-full"
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {toOptions.map((account) => (
+                  <SelectItem key={account.id} value={account.id}>
+                    {account.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="amount">Amount *</Label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium">€</span>
@@ -100,45 +166,13 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="from">From Account *</Label>
-            <Select
-              value={formData.from_account_id}
-              onValueChange={(value) => setFormData({ ...formData, from_account_id: value })}
-              required
-              className="w-full"
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {orderedAccounts.map((account) => (
-                  <SelectItem key={account.id} value={account.id}>
-                    {account.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="to">To Account *</Label>
-            <Select
-              value={formData.to_account_id}
-              onValueChange={(value) => setFormData({ ...formData, to_account_id: value })}
-              required
-              className="w-full"
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {orderedAccounts.map((account) => (
-                  <SelectItem key={account.id} value={account.id}>
-                    {account.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label htmlFor="subcategory">Subcategory</Label>
+            <Input
+              id="subcategory"
+              placeholder="e.g., Rent, Fees, etc."
+              value={formData.subcategory}
+              onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
+            />
           </div>
 
           <div className="space-y-2">
@@ -197,23 +231,30 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
             </div>
           )}
 
-          <div className="flex gap-3 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="flex-1"
-              onClick={() => onOpenChange(false)}
-              disabled={loading}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              className="flex-1 bg-blue-600 hover:bg-blue-700"
-              disabled={loading}
-            >
-              {loading ? 'Updating...' : 'Update'}
-            </Button>
+          <div className="pt-2 space-y-2">
+            {sameAccountError && (
+              <div className="text-sm text-red-600">
+                Source and destination accounts must be different.
+              </div>
+            )}
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={() => onOpenChange(false)}
+                disabled={loading}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="flex-1 bg-blue-600 hover:bg-blue-700"
+                disabled={loading || sameAccountError}
+              >
+                {loading ? 'Updating...' : 'Update'}
+              </Button>
+            </div>
           </div>
         </form>
       </DialogContent>

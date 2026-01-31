@@ -20,9 +20,10 @@ import { sortAccountsByOrder } from '@/utils';
 export default function TransferForm({ onSuccess, onCancel, initialData, initialDate, onAfterCreate }) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState(() => ({
-    amount: initialData?.amount?.toString() || '',
     from_account_id: initialData?.from_account_id || '',
     to_account_id: initialData?.to_account_id || '',
+    amount: initialData?.amount?.toString() || '',
+    subcategory: initialData?.subcategory || '',
     date: initialDate || format(new Date(), 'yyyy-MM-dd'),
     notes: initialData?.notes || '',
     cleared: initialData?.cleared ?? true,
@@ -31,9 +32,10 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
 
   React.useEffect(() => {
     setFormData({
-      amount: initialData?.amount?.toString() || '',
       from_account_id: initialData?.from_account_id || '',
       to_account_id: initialData?.to_account_id || '',
+      amount: initialData?.amount?.toString() || '',
+      subcategory: initialData?.subcategory || '',
       date: initialDate || format(new Date(), 'yyyy-MM-dd'),
       notes: initialData?.notes || '',
       cleared: initialData?.cleared ?? true,
@@ -46,6 +48,9 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
     queryFn: () => base44.entities.Account.list(),
   });
   const orderedAccounts = sortAccountsByOrder(accounts);
+  const fromOptions = orderedAccounts.filter((account) => account.id !== formData.to_account_id);
+  const toOptions = orderedAccounts.filter((account) => account.id !== formData.from_account_id);
+  const sameAccountError = formData.from_account_id && formData.to_account_id && formData.from_account_id === formData.to_account_id;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -71,6 +76,7 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
       amount: parseFloat(formData.amount),
       from_account_id: formData.from_account_id,
       to_account_id: formData.to_account_id,
+      subcategory: formData.subcategory || undefined,
       date: formData.date,
       notes: formData.notes || undefined,
       cleared: formData.cleared,
@@ -89,28 +95,16 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="space-y-2">
-        <Label htmlFor="amount">Amount *</Label>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium">€</span>
-          <Input
-            id="amount"
-            type="number"
-            step="0.01"
-            min="0"
-            placeholder="0.00"
-            className="pl-7 text-lg"
-            value={formData.amount}
-            onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-            required
-          />
-        </div>
-      </div>
-
-      <div className="space-y-2">
         <Label htmlFor="from_account">From Account *</Label>
         <Select
           value={formData.from_account_id}
-          onValueChange={(value) => setFormData({ ...formData, from_account_id: value })}
+          onValueChange={(value) =>
+            setFormData((prev) => ({
+              ...prev,
+              from_account_id: value,
+              to_account_id: prev.to_account_id === value ? '' : prev.to_account_id
+            }))
+          }
           required
           className="w-full"
         >
@@ -118,7 +112,7 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
             <SelectValue placeholder="Select source account" />
           </SelectTrigger>
           <SelectContent>
-            {orderedAccounts.map((account) => (
+            {fromOptions.map((account) => (
               <SelectItem key={account.id} value={account.id} label={account.name}>
                 <div className="flex items-center gap-2">
                   <div 
@@ -143,7 +137,13 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
         <Label htmlFor="to_account">To Account *</Label>
         <Select
           value={formData.to_account_id}
-          onValueChange={(value) => setFormData({ ...formData, to_account_id: value })}
+          onValueChange={(value) =>
+            setFormData((prev) => ({
+              ...prev,
+              to_account_id: value,
+              from_account_id: prev.from_account_id === value ? '' : prev.from_account_id
+            }))
+          }
           required
           className="w-full"
         >
@@ -151,7 +151,7 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
             <SelectValue placeholder="Select destination account" />
           </SelectTrigger>
           <SelectContent>
-            {orderedAccounts.map((account) => (
+            {toOptions.map((account) => (
               <SelectItem key={account.id} value={account.id} label={account.name}>
                 <div className="flex items-center gap-2">
                   <div 
@@ -164,6 +164,34 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="amount">Amount *</Label>
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium">€</span>
+          <Input
+            id="amount"
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="0.00"
+            className="pl-7 text-lg"
+            value={formData.amount}
+            onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+            required
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="subcategory">Subcategory</Label>
+        <Input
+          id="subcategory"
+          placeholder="e.g., Rent, Fees, etc."
+          value={formData.subcategory}
+          onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
+        />
       </div>
 
       <div className="space-y-2">
@@ -211,23 +239,30 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
         </div>
       </div>
 
-      <div className="flex gap-3 pt-2">
-        <Button
-          type="button"
-          variant="outline"
-          className="flex-1"
-          onClick={onCancel}
-          disabled={loading}
-        >
-          Cancel
-        </Button>
-        <Button
-          type="submit"
-          className="flex-1 bg-blue-500 hover:bg-blue-600"
-          disabled={loading}
-        >
-          {loading ? 'Creating...' : 'Create Transfer'}
-        </Button>
+      <div className="pt-2 space-y-2">
+        {sameAccountError && (
+          <div className="text-sm text-red-600">
+            Source and destination accounts must be different.
+          </div>
+        )}
+        <div className="flex gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="flex-1"
+            onClick={onCancel}
+            disabled={loading}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            className="flex-1 bg-blue-500 hover:bg-blue-600"
+            disabled={loading || sameAccountError}
+          >
+            {loading ? 'Creating...' : 'Create Transfer'}
+          </Button>
+        </div>
       </div>
     </form>
   );
