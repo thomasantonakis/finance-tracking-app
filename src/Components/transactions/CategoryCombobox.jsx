@@ -31,14 +31,16 @@ export default function CategoryCombobox({
   label,
   value,
   onChange,
+  onSelectItem,
   categories,
   placeholder,
   required,
 }) {
   const [open, setOpen] = React.useState(false);
+  const [hasUserTyped, setHasUserTyped] = React.useState(false);
   const wrapperRef = React.useRef(null);
   const normalized = React.useMemo(() => normalizeCategories(categories), [categories]);
-  const query = value || "";
+  const query = open && !hasUserTyped ? "" : value || "";
   const queryLower = query.trim().toLowerCase();
 
   const filtered = React.useMemo(() => {
@@ -64,6 +66,8 @@ export default function CategoryCombobox({
 
     const handleSelect = (item) => {
       onChange(item.label);
+      onSelectItem?.(item);
+      setHasUserTyped(false);
       setOpen(false);
     };
 
@@ -77,9 +81,13 @@ export default function CategoryCombobox({
           placeholder={placeholder}
           onChange={(e) => {
             onChange(e.target.value);
+            setHasUserTyped(true);
             setOpen(true);
           }}
-          onFocus={() => setOpen(true)}
+          onFocus={() => {
+            setHasUserTyped(false);
+            setOpen(true);
+          }}
           required={required}
         />
         {open && (

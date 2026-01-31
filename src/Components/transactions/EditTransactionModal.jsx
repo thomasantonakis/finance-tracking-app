@@ -98,11 +98,28 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
     });
   }, [deduplicatedCategories, transactions]);
 
+  const subcategoryOptions = React.useMemo(() => {
+    const totals = transactions.reduce((acc, t) => {
+      const raw = (t.subcategory || '').trim();
+      if (!raw) return acc;
+      const key = raw.toLowerCase();
+      if (!acc[key]) acc[key] = { name: raw, total: 0 };
+      acc[key].total += t.amount || 0;
+      return acc;
+    }, {});
+
+    return Object.values(totals).sort((a, b) => {
+      if (a.total !== b.total) return b.total - a.total;
+      return a.name.localeCompare(b.name);
+    });
+  }, [transactions]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
   const rawCategory = (formData.category || '').trim();
-  if (!formData.amount || !rawCategory || !formData.account_id || !formData.date) {
+  const rawSubcategory = (formData.subcategory || '').trim();
+  if (!formData.amount || !rawCategory || !rawSubcategory || !formData.account_id || !formData.date) {
     toast.error('Please fill in all required fields');
     return;
   }
@@ -126,7 +143,7 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
   await base44.entities[entity].update(transaction.id, {
     amount: parseFloat(formData.amount),
     category: finalCategory,
-    subcategory: formData.subcategory || undefined,
+    subcategory: rawSubcategory,
       account_id: formData.account_id,
       date: formData.date,
       notes: formData.notes || undefined,
@@ -152,15 +169,15 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
 
         <form onSubmit={handleSubmit} className="flex flex-col max-h-[70vh]">
           <div className="flex-1 overflow-auto space-y-4 pr-1 pb-20">
-            <div className="space-y-2">
-              <Label htmlFor="subcategory">Subcategory</Label>
-              <Input
-                id="subcategory"
-                placeholder="e.g., Groceries, Gas, etc."
-                value={formData.subcategory}
-                onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
-              />
-            </div>
+            <CategoryCombobox
+              id="subcategory"
+              label="Subcategory *"
+              value={formData.subcategory}
+              onChange={(value) => setFormData({ ...formData, subcategory: value })}
+              categories={subcategoryOptions.map((item) => item.name)}
+              placeholder="Select subcategory"
+              required
+            />
 
             <CategoryCombobox
               id="category"

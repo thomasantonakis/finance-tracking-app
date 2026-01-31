@@ -70,6 +70,7 @@ export default function DuplicateTransactionModal({
             initialData={initialData}
             initialDate={defaultDate}
             onAfterCreate={handleCreated}
+            filterSubcategoryByCategory={false}
           />
         )}
       </DialogContent>

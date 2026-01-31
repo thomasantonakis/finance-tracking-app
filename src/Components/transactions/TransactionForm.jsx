@@ -32,7 +32,7 @@ const categoryLabels = {
   income: 'Income Category'
 };
 
-export default function TransactionForm({ type, onSuccess, onCancel, initialData, initialDate, onAfterCreate }) {
+export default function TransactionForm({ type, onSuccess, onCancel, initialData, initialDate, onAfterCreate, filterSubcategoryByCategory = true }) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState(() => ({
     amount: initialData?.amount?.toString() || '',
@@ -103,11 +103,56 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
     });
   }, [deduplicatedCategories, transactions]);
 
+  const subcategoryOptions = React.useMemo(() => {
+    const selectedCategory = (formData.category || '').trim().toLowerCase();
+    const totals = transactions.reduce((acc, t) => {
+      if (filterSubcategoryByCategory && selectedCategory && (t.category || '').toLowerCase() !== selectedCategory) return acc;
+      const raw = (t.subcategory || '').trim();
+      if (!raw) return acc;
+      const key = raw.toLowerCase();
+      if (!acc[key]) acc[key] = { name: raw, total: 0 };
+      acc[key].total += t.amount || 0;
+      return acc;
+    }, {});
+
+    return Object.values(totals).sort((a, b) => {
+      if (a.total !== b.total) return b.total - a.total;
+      return a.name.localeCompare(b.name);
+    });
+  }, [transactions, formData.category, filterSubcategoryByCategory]);
+
+  const topCategoryBySubcategory = React.useMemo(() => {
+    const counts = {};
+    transactions.forEach((t) => {
+      const sub = (t.subcategory || '').trim();
+      const cat = (t.category || '').trim();
+      if (!sub || !cat) return;
+      const subKey = sub.toLowerCase();
+      const catKey = cat.toLowerCase();
+      if (!counts[subKey]) counts[subKey] = {};
+      if (!counts[subKey][catKey]) {
+        counts[subKey][catKey] = { name: cat, count: 0 };
+      }
+      counts[subKey][catKey].count += 1;
+    });
+
+    const result = {};
+    Object.entries(counts).forEach(([subKey, catMap]) => {
+      const best = Object.values(catMap).sort((a, b) => {
+        if (a.count !== b.count) return b.count - a.count;
+        return a.name.localeCompare(b.name);
+      })[0];
+      if (best) result[subKey] = best.name;
+    });
+    return result;
+  }, [transactions]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     const rawCategory = (formData.category || '').trim();
-    if (!formData.amount || !rawCategory || !formData.account_id || !formData.date) {
+    const rawSubcategory = (formData.subcategory || '').trim();
+    if (!formData.amount || !rawCategory || !rawSubcategory || !formData.account_id || !formData.date) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -136,7 +181,7 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
     await base44.entities[entity].create({
       amount: parseFloat(formData.amount),
       category: finalCategory,
-      subcategory: formData.subcategory || undefined,
+      subcategory: rawSubcategory,
       account_id: formData.account_id,
       date: formData.date,
       notes: formData.notes || undefined,
@@ -153,15 +198,24 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
   return (
     <form onSubmit={handleSubmit} className="flex flex-col max-h-[70vh]">
       <div className="flex-1 overflow-auto space-y-5 pr-1 pb-20">
-        <div className="space-y-2">
-          <Label htmlFor="subcategory">Subcategory</Label>
-          <Input
-            id="subcategory"
-            placeholder="e.g., Groceries, Gas, etc."
-            value={formData.subcategory}
-            onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
-          />
-        </div>
+        <CategoryCombobox
+          id="subcategory"
+          label="Subcategory *"
+          value={formData.subcategory}
+          onChange={(value) => setFormData({ ...formData, subcategory: value })}
+          onSelectItem={(item) => {
+            const suggestedCategory = topCategoryBySubcategory[item.label.toLowerCase()];
+            if (suggestedCategory) {
+              setFormData((prev) => ({
+                ...prev,
+                category: suggestedCategory
+              }));
+            }
+          }}
+          categories={subcategoryOptions.map((item) => item.name)}
+          placeholder="Select subcategory"
+          required
+        />
 
         <CategoryCombobox
           id="category"
