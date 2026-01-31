@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { format, isSameDay } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowUpRight, ArrowDownRight, ArrowLeftRight, Trash2, Edit, Copy, AlertCircle } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, ArrowLeftRight, Trash2, Edit, Copy, AlertCircle, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import EditTransactionModal from '../transactions/EditTransactionModal';
 import EditTransferModal from '../transactions/EditTransferModal';
@@ -21,6 +21,7 @@ export default function DayTransactions({
   const [editingType, setEditingType] = useState(null);
   const [duplicatingTransaction, setDuplicatingTransaction] = useState(null);
   const [duplicatingType, setDuplicatingType] = useState(null);
+  const [openActionsId, setOpenActionsId] = useState(null);
   const isStartingBalance = (t) =>
     t?.type !== 'transfer' && (t?.category || '').toLowerCase() === 'starting balance';
 
@@ -38,6 +39,17 @@ export default function DayTransactions({
     setDuplicatingTransaction(transaction);
     setDuplicatingType(type);
   };
+
+  useEffect(() => {
+    if (!openActionsId) return;
+    const handleClick = (event) => {
+      if (!event.target.closest('[data-actions-menu="true"]')) {
+        setOpenActionsId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [openActionsId]);
 
   const getImportanceLabel = (t) => {
     if (t.type === 'income') return t.important ? 'Main' : 'Extras';
@@ -99,7 +111,7 @@ export default function DayTransactions({
           No transactions for this day
         </p>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2 pb-24 sm:pb-6">
           <AnimatePresence>
             {allTransactions.map((transaction, index) => (
               <motion.div
@@ -108,7 +120,7 @@ export default function DayTransactions({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, x: -100 }}
                 transition={{ delay: index * 0.03 }}
-                className="group flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors"
+                className="group flex flex-wrap items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors"
               >
                 <div className={`p-2 rounded-lg ${
                   transaction.type === 'income' 
@@ -128,7 +140,7 @@ export default function DayTransactions({
                 
                 <div className="flex-1 min-w-0">
                   {transaction.type === 'transfer' ? (
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <p className="font-medium text-slate-900 text-sm">Transfer</p>
                       <span className="text-slate-300">•</span>
                       <p className="text-xs text-slate-500 truncate">
@@ -137,7 +149,7 @@ export default function DayTransactions({
                       <ImportanceEmoji transaction={transaction} />
                     </div>
                   ) : (
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <p className="font-semibold text-slate-900 text-sm capitalize">
                         {transaction.category}
                       </p>
@@ -165,8 +177,8 @@ export default function DayTransactions({
                   )}
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <p className={`text-base font-bold tabular-nums ${
+                <div className="flex w-24 flex-col items-end gap-1">
+                  <p className={`text-base font-bold tabular-nums whitespace-nowrap ${
                     transaction.type === 'income' 
                       ? 'text-green-600' 
                       : transaction.type === 'transfer'
@@ -177,30 +189,76 @@ export default function DayTransactions({
                   </p>
                   {!isStartingBalance(transaction) && (
                     <>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-10 w-10 bg-blue-50 text-blue-600 hover:bg-blue-100"
-                        onClick={() => handleEdit(transaction, transaction.type)}
-                      >
-                        <Edit className="w-5 h-5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-10 w-10 bg-amber-50 text-amber-600 hover:bg-amber-100"
-                        onClick={() => handleDuplicate(transaction, transaction.type)}
-                      >
-                        <Copy className="w-5 h-5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-10 w-10 bg-red-50 text-red-600 hover:bg-red-100"
-                        onClick={() => onDelete(transaction.id, transaction.type)}
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </Button>
+                      <div className="hidden sm:flex items-center gap-2 mt-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 bg-blue-50 text-blue-600 hover:bg-blue-100"
+                          onClick={() => handleEdit(transaction, transaction.type)}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 bg-amber-50 text-amber-600 hover:bg-amber-100"
+                          onClick={() => handleDuplicate(transaction, transaction.type)}
+                        >
+                          <Copy className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 bg-red-50 text-red-600 hover:bg-red-100"
+                          onClick={() => onDelete(transaction.id, transaction.type)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <div className="relative sm:hidden mt-1" data-actions-menu="true">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 bg-slate-100 text-slate-700 hover:bg-slate-200"
+                          onClick={() => setOpenActionsId(openActionsId === transaction.id ? null : transaction.id)}
+                        >
+                          <MoreHorizontal className="w-5 h-5" />
+                        </Button>
+                        {openActionsId === transaction.id && (
+                          <div className="absolute right-0 mt-2 w-36 rounded-lg border border-slate-200 bg-white shadow-lg z-20">
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                              onClick={() => {
+                                setOpenActionsId(null);
+                                handleEdit(transaction, transaction.type);
+                              }}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                              onClick={() => {
+                                setOpenActionsId(null);
+                                handleDuplicate(transaction, transaction.type);
+                              }}
+                            >
+                              Duplicate
+                            </button>
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                              onClick={() => {
+                                setOpenActionsId(null);
+                                onDelete(transaction.id, transaction.type);
+                              }}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </>
                   )}
                 </div>

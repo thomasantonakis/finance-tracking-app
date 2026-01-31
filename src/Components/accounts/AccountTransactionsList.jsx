@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { format, parseISO, startOfMonth } from 'date-fns';
-import { ArrowUpRight, ArrowDownRight, ArrowLeftRight, Edit, Trash2, Copy, AlertCircle } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, ArrowLeftRight, Edit, Trash2, Copy, AlertCircle, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import EditTransactionModal from '../transactions/EditTransactionModal';
 import EditTransferModal from '../transactions/EditTransferModal';
@@ -18,6 +18,7 @@ export default function AccountTransactionsList({
   const [editingType, setEditingType] = useState(null);
   const [duplicatingTransaction, setDuplicatingTransaction] = useState(null);
   const [duplicatingType, setDuplicatingType] = useState(null);
+  const [openActionsId, setOpenActionsId] = useState(null);
 
   const getCreatedStamp = (t) => t?.created_at ?? t?.created_date ?? t?.date;
   const getUpdatedStamp = (t) => t?.updated_at ?? t?.updated_date ?? getCreatedStamp(t);
@@ -79,6 +80,17 @@ export default function AccountTransactionsList({
     setDuplicatingType(type);
   };
 
+  useEffect(() => {
+    if (!openActionsId) return;
+    const handleClick = (event) => {
+      if (!event.target.closest('[data-actions-menu="true"]')) {
+        setOpenActionsId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [openActionsId]);
+
   const getImportanceLabel = (t) => {
     if (t.type === 'income') return t.important ? 'Main' : 'Extras';
     if (t.type === 'expense') return t.important ? 'Must Have' : 'Nice to Have';
@@ -125,7 +137,7 @@ export default function AccountTransactionsList({
                 return (
                   <div
                     key={transaction.id}
-                    className="group flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50"
+                    className="group flex flex-wrap items-center gap-3 p-3 rounded-lg hover:bg-slate-50"
                   >
                     <div className={`p-2 rounded-lg ${
                       transaction.type === 'income' ? 'bg-green-50' : 
@@ -141,7 +153,7 @@ export default function AccountTransactionsList({
                     </div>
                     
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
+                      <div className="flex flex-wrap items-center gap-2 mb-0.5">
                         {transaction.type === 'transfer' ? (
                           <p className="font-medium text-slate-900 text-sm">
                             {transaction.from_account_id === selectedAccount
@@ -179,49 +191,93 @@ export default function AccountTransactionsList({
                       )}
                     </div>
 
-                    <div className="flex flex-col items-end gap-1">
-                      <div className="flex items-center gap-1">
-                        <p className={`text-base font-bold tabular-nums ${
-                          transaction.type === 'income' ? 'text-green-600' : 
-                          transaction.type === 'transfer' ? 
-                            (transaction.from_account_id === selectedAccount ? 'text-red-600' : 'text-green-600')
-                          : 'text-red-600'
-                        }`}>
-                          {transaction.type === 'income' ? '+' : 
-                           transaction.type === 'transfer' ?
-                             (transaction.from_account_id === selectedAccount ? '-' : '+')
-                           : '-'}€{formatAmount(transaction.amount)}
+                    <div className="flex w-28 flex-col items-end gap-1">
+                        <p className={`text-base font-bold tabular-nums whitespace-nowrap ${
+                            transaction.type === 'income' ? 'text-green-600' : 
+                            transaction.type === 'transfer' ? 
+                              (transaction.from_account_id === selectedAccount ? 'text-red-600' : 'text-green-600')
+                            : 'text-red-600'
+                          }`}>
+                            {transaction.type === 'income' ? '+' : 
+                             transaction.type === 'transfer' ?
+                               (transaction.from_account_id === selectedAccount ? '-' : '+')
+                             : '-'}€{formatAmount(transaction.amount)}
                         </p>
-                        {!isStarting && (
-                          <>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Bal: €{formatAmount(transactionBalance)}</p>
+                      {!isStarting && (
+                        <>
+                          <div className="hidden sm:flex items-center gap-2 mt-1">
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-10 w-10 bg-blue-50 text-blue-600 hover:bg-blue-100"
+                              className="h-9 w-9 bg-blue-50 text-blue-600 hover:bg-blue-100"
                               onClick={() => handleEdit(transaction, transaction.type)}
                             >
-                              <Edit className="w-5 h-5" />
+                              <Edit className="w-4 h-4" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-10 w-10 bg-amber-50 text-amber-600 hover:bg-amber-100"
+                              className="h-9 w-9 bg-amber-50 text-amber-600 hover:bg-amber-100"
                               onClick={() => handleDuplicate(transaction, transaction.type)}
                             >
-                              <Copy className="w-5 h-5" />
+                              <Copy className="w-4 h-4" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-10 w-10 bg-red-50 text-red-600 hover:bg-red-100"
+                              className="h-9 w-9 bg-red-50 text-red-600 hover:bg-red-100"
                               onClick={() => onDelete(transaction.id, transaction.type)}
                             >
-                              <Trash2 className="w-5 h-5" />
+                              <Trash2 className="w-4 h-4" />
                             </Button>
-                          </>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Bal: €{formatAmount(transactionBalance)}</p>
+                          </div>
+                          <div className="relative sm:hidden mt-1" data-actions-menu="true">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 bg-slate-100 text-slate-700 hover:bg-slate-200"
+                              onClick={() => setOpenActionsId(openActionsId === transaction.id ? null : transaction.id)}
+                            >
+                              <MoreHorizontal className="w-5 h-5" />
+                            </Button>
+                            {openActionsId === transaction.id && (
+                              <div className="absolute right-0 mt-2 w-36 rounded-lg border border-slate-200 bg-white shadow-lg z-20">
+                                <button
+                                  type="button"
+                                  className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                                  onClick={() => {
+                                    setOpenActionsId(null);
+                                    handleEdit(transaction, transaction.type);
+                                  }}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                                  onClick={() => {
+                                    setOpenActionsId(null);
+                                    handleDuplicate(transaction, transaction.type);
+                                  }}
+                                >
+                                  Duplicate
+                                </button>
+                                <button
+                                  type="button"
+                                  className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                                  onClick={() => {
+                                    setOpenActionsId(null);
+                                    onDelete(transaction.id, transaction.type);
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 );
