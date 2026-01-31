@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { motion } from 'framer-motion';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isToday, startOfWeek, endOfWeek, isSameMonth } from 'date-fns';
 
@@ -25,6 +25,7 @@ export default function CalendarGrid({
   const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
 
   const displayDays = collapsed ? weekDays : days;
+  const lastTapRef = useRef({ time: 0, key: null });
 
   const getDayData = (day) => {
     const dayExpenses = expenses.filter(e => 
@@ -67,6 +68,18 @@ export default function CalendarGrid({
           const hasData = dayExpenses > 0 || dayIncome > 0 || dayTransfers > 0;
           const weekend = isWeekend(day);
 
+          const handleTouchEnd = () => {
+            if (!onDoubleClick) return;
+            const now = Date.now();
+            const key = day.toDateString();
+            if (lastTapRef.current.key === key && now - lastTapRef.current.time < 300) {
+              lastTapRef.current = { time: 0, key: null };
+              onDoubleClick(day);
+              return;
+            }
+            lastTapRef.current = { time: now, key };
+          };
+
           return (
             <motion.button
               key={day.toString()}
@@ -75,6 +88,7 @@ export default function CalendarGrid({
               transition={{ delay: index * 0.01 }}
               onClick={() => onSelectDate(day)}
               onDoubleClick={() => onDoubleClick && onDoubleClick(day)}
+              onTouchEnd={handleTouchEnd}
               className={`relative h-20 rounded-md p-1 transition-all border ${
                 isTodayDay
                   ? 'bg-blue-500 border-blue-600'
