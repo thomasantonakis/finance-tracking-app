@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { motion } from 'framer-motion';
@@ -13,15 +13,37 @@ import {
   subDays,
   subMonths,
   subYears,
+  format,
 } from 'date-fns';
 import NetWorthCard from '../Components/dashboard/NetWorthCard';
 import RecentTransactions from '../Components/dashboard/RecentTransactions';
 import FloatingAddButton from '../Components/transactions/FloatingAddButton';
 import { ensureStartingBalanceTransactions, useSessionState } from '@/utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { formatAmount } from '@/utils';
+import { Edit, Copy, Trash2 } from 'lucide-react';
+import EditTransactionModal from '../Components/transactions/EditTransactionModal';
+import EditTransferModal from '../Components/transactions/EditTransferModal';
+import DuplicateTransactionModal from '../Components/transactions/DuplicateTransactionModal';
 
 export default function Home() {
   const queryClient = useQueryClient();
   const [selectedPeriod, setSelectedPeriod] = useSessionState('home.selectedPeriod', 'last30');
+  const [showSearch, setShowSearch] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState(null);
+  const [editingType, setEditingType] = useState(null);
+  const [duplicatingTransaction, setDuplicatingTransaction] = useState(null);
+  const [duplicatingType, setDuplicatingType] = useState(null);
+  const [searchFilters, setSearchFilters] = useSessionState('home.searchFilters', {
+    query: '',
+    dateFrom: '',
+    dateTo: '',
+    minAmount: '',
+    maxAmount: '',
+  });
 
   const { data: expenses = [], isLoading: loadingExpenses } = useQuery({
     queryKey: ['expenses'],
@@ -207,6 +229,27 @@ export default function Home() {
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 10);
 
+  const allSearchTransactions = [
+    ...expenses.map(e => ({ ...e, type: 'expense' })),
+    ...income.map(i => ({ ...i, type: 'income' })),
+    ...transfers.map(t => ({ ...t, type: 'transfer' }))
+  ]
+    .filter((t) => t.type === 'transfer' || !isSystemStarting(t));
+
+  const filteredSearchTransactions = allSearchTransactions.filter((t) => {
+    if (searchFilters.query.trim()) {
+      const q = searchFilters.query.trim().toLowerCase();
+      const hay = `${t.category || ''} ${t.subcategory || ''} ${t.notes || ''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (searchFilters.dateFrom && new Date(t.date) < new Date(searchFilters.dateFrom)) return false;
+    if (searchFilters.dateTo && new Date(t.date) > new Date(searchFilters.dateTo)) return false;
+    const amount = Number(t.amount) || 0;
+    if (searchFilters.minAmount !== '' && amount < Number(searchFilters.minAmount)) return false;
+    if (searchFilters.maxAmount !== '' && amount > Number(searchFilters.maxAmount)) return false;
+    return true;
+  }).sort((a, b) => new Date(b.date) - new Date(a.date));
+
   const isLoading = loadingExpenses || loadingIncome;
 
   return (
@@ -217,10 +260,21 @@ export default function Home() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-2 tracking-tight">
-            Financial Dashboard
-          </h1>
-          <p className="text-slate-500">Track your income and expenses</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-2 tracking-tight">
+                Financial Dashboard
+              </h1>
+              <p className="text-slate-500">Track your income and expenses</p>
+            </div>
+            <Button
+              variant="outline"
+              className="border-slate-300"
+              onClick={() => setShowSearch(true)}
+            >
+              Search Transactions
+            </Button>
+          </div>
         </motion.div>
 
         <div className="space-y-6">
@@ -248,6 +302,178 @@ export default function Home() {
           />
         </div>
       </div>
+      <Dialog open={showSearch} onOpenChange={setShowSearch}>
+        <DialogContent className="max-w-7xl">
+          <DialogHeader>
+            <DialogTitle>Search Transactions</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 max-h-[70vh] overflow-auto pr-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <Input
+                placeholder="Search category, subcategory, notes..."
+                value={searchFilters.query}
+                onChange={(e) => setSearchFilters((prev) => ({ ...prev, query: e.target.value }))}
+              />
+              <div className="grid grid-cols-2 gap-2 md:col-span-2">
+                <Input
+                  type="date"
+                  value={searchFilters.dateFrom}
+                  onChange={(e) => setSearchFilters((prev) => ({ ...prev, dateFrom: e.target.value }))}
+                />
+                <Input
+                  type="date"
+                  value={searchFilters.dateTo}
+                  onChange={(e) => setSearchFilters((prev) => ({ ...prev, dateTo: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2 md:col-span-2">
+                <Input
+                  type="number"
+                  placeholder="Min amount"
+                  value={searchFilters.minAmount}
+                  onChange={(e) => setSearchFilters((prev) => ({ ...prev, minAmount: e.target.value }))}
+                />
+                <Input
+                  type="number"
+                  placeholder="Max amount"
+                  value={searchFilters.maxAmount}
+                  onChange={(e) => setSearchFilters((prev) => ({ ...prev, maxAmount: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="text-sm text-slate-500">
+              {filteredSearchTransactions.length} transaction(s) found
+            </div>
+
+            <div className="space-y-2">
+              {filteredSearchTransactions.map((transaction) => (
+                <div
+                  key={transaction.id}
+                  className="flex items-center gap-4 p-3 rounded-xl border border-slate-100 bg-white"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      {transaction.type === 'transfer' ? (
+                        <>
+                          <p className="font-medium text-slate-900">Transfer</p>
+                          <span className="text-slate-300">•</span>
+                          <p className="text-sm text-slate-500 truncate">
+                            {accounts.find((a) => a.id === transaction.from_account_id)?.name || 'Unknown'} → {accounts.find((a) => a.id === transaction.to_account_id)?.name || 'Unknown'}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-medium text-slate-900 capitalize">
+                            {transaction.category}
+                          </p>
+                          {transaction.subcategory && (
+                            <>
+                              <span className="text-slate-300">•</span>
+                              <p className="text-sm text-slate-500 truncate">
+                                {transaction.subcategory}
+                              </p>
+                            </>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      {format(new Date(transaction.date), 'MMM d, yyyy')}
+                      {transaction.notes ? ` • ${transaction.notes}` : ''}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-slate-500">
+                      {transaction.type === 'transfer'
+                        ? accounts.find((a) => a.id === transaction.from_account_id)?.name || ''
+                        : accounts.find((a) => a.id === transaction.account_id)?.name || ''}
+                    </p>
+                    <p className={`text-base font-bold tabular-nums ${
+                      transaction.type === 'income'
+                        ? 'text-green-600'
+                        : transaction.type === 'transfer'
+                        ? 'text-blue-600'
+                        : 'text-red-600'
+                    }`}>
+                      {transaction.type === 'transfer' ? '' : transaction.type === 'income' ? '+' : '-'}€{formatAmount(transaction.amount)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-10 w-10 bg-blue-50 text-blue-600 hover:bg-blue-100"
+                      onClick={() => {
+                        setEditingTransaction(transaction);
+                        setEditingType(transaction.type);
+                      }}
+                    >
+                      <Edit className="w-5 h-5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-10 w-10 bg-amber-50 text-amber-600 hover:bg-amber-100"
+                      onClick={() => {
+                        setDuplicatingTransaction(transaction);
+                        setDuplicatingType(transaction.type);
+                      }}
+                    >
+                      <Copy className="w-5 h-5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-10 w-10 bg-red-50 text-red-600 hover:bg-red-100"
+                      onClick={() => handleDelete(transaction.id, transaction.type)}
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              {filteredSearchTransactions.length === 0 && (
+                <p className="text-sm text-slate-400">No transactions match your filters.</p>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {editingTransaction && editingType !== 'transfer' && (
+        <EditTransactionModal
+          open={!!editingTransaction}
+          onOpenChange={(open) => !open && setEditingTransaction(null)}
+          transaction={editingTransaction}
+          type={editingType}
+          onSuccess={handleSuccess}
+        />
+      )}
+
+      {editingTransaction && editingType === 'transfer' && (
+        <EditTransferModal
+          open={!!editingTransaction}
+          onOpenChange={(open) => !open && setEditingTransaction(null)}
+          transfer={editingTransaction}
+          onSuccess={handleSuccess}
+        />
+      )}
+
+      {duplicatingTransaction && duplicatingType && (
+        <DuplicateTransactionModal
+          open={!!duplicatingTransaction}
+          onOpenChange={(open) => {
+            if (!open) {
+              setDuplicatingTransaction(null);
+              setDuplicatingType(null);
+            }
+          }}
+          transaction={duplicatingTransaction}
+          type={duplicatingType}
+          onSuccess={handleSuccess}
+        />
+      )}
     </div>
   );
 }
