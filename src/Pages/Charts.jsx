@@ -289,8 +289,8 @@ export default function Charts() {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <div className="bg-white rounded-2xl p-6 mb-6 border border-slate-100">
-            <div className="flex items-center justify-between mb-6">
+          <div className="sticky top-0 z-30 -mx-4 px-4 py-3 bg-slate-50/95 backdrop-blur border-b border-slate-200/70 mb-6">
+            <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3">
                 <Button
                   variant="ghost"
@@ -328,7 +328,7 @@ export default function Charts() {
               </Select>
             </div>
 
-            <div className="flex gap-4 mb-6">
+            <div className="flex gap-4">
               <Select value={viewMode} onValueChange={setViewMode}>
                 <SelectTrigger className="w-44">
                   <SelectValue />
@@ -360,7 +360,9 @@ export default function Charts() {
                 </label>
               </div>
             </div>
+          </div>
 
+          <div className="bg-white rounded-2xl p-6 mb-6 border border-slate-100">
             <div>
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={lineChartData}>

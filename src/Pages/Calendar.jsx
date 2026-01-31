@@ -109,7 +109,8 @@ export default function Calendar() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-6"
         >
-          <div className="flex items-center justify-between mb-6">
+          <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur border-b border-slate-200/70 py-3 mb-6">
+            <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Button
                 variant="ghost"
@@ -149,6 +150,7 @@ export default function Calendar() {
                 Show Full Month
               </Button>
             )}
+            </div>
           </div>
 
           <CalendarGrid

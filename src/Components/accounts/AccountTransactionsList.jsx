@@ -83,9 +83,11 @@ export default function AccountTransactionsList({
     <div className="space-y-6">
       {sortedMonths.map(monthKey => (
         <div key={monthKey} className="bg-white rounded-2xl p-4 border border-slate-100">
-          <h3 className="text-sm font-semibold text-slate-900 mb-3">
-            {format(parseISO(monthKey + '-01'), 'MMMM yyyy')}
-          </h3>
+          <div className="sticky top-0 z-10 bg-white/90 backdrop-blur py-1">
+            <h3 className="text-sm font-semibold text-slate-900 mb-3">
+              {format(parseISO(monthKey + '-01'), 'MMMM yyyy')}
+            </h3>
+          </div>
           <div className="space-y-2">
             {groupedByMonth[monthKey]
               .sort((a, b) => {

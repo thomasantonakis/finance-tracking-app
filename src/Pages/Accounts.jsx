@@ -310,7 +310,8 @@ export default function Accounts() {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <div className="flex items-center justify-between mb-6">
+          <div className="sticky top-0 z-30 bg-slate-50/90 backdrop-blur border-b border-slate-200/60 py-3 mb-6">
+            <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-slate-900">Accounts</h1>
             <div className="flex items-center gap-3">
               <Button
@@ -327,6 +328,7 @@ export default function Accounts() {
               >
                 {editMode ? <><Check className="w-4 h-4 mr-2" /> Done</> : <><Edit3 className="w-4 h-4 mr-2" /> Edit</>}
               </Button>
+            </div>
             </div>
           </div>
 
