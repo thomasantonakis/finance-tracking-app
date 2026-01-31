@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { motion } from 'framer-motion';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfYear, endOfYear, eachMonthOfInterval, endOfDay } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfYear, endOfYear, eachMonthOfInterval, endOfDay, addYears } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -79,6 +79,11 @@ export default function Charts() {
     });
   };
 
+  const formatDeltaPercent = (current, last) => {
+    if (!last) return current === 0 ? '0.0%' : '∞%';
+    return `${formatNumber((current / last - 1) * 100, 1)}%`;
+  };
+
   const filteredExpenses = filterTransactions(expenses);
   const filteredIncome = filterTransactions(income);
   const filteredTransfers = filterTransactions(transfers);
@@ -108,6 +113,7 @@ export default function Charts() {
 
     return periods.map((period, index) => {
       const periodEnd = viewMode === 'months' ? endOfMonth(period.date) : endOfDay(period.date);
+      const periodEndLastYear = addYears(periodEnd, -1);
 
       // Get all transactions up to and including this period
       const upToDateExpenses = filteredExpenses.filter(e => {
@@ -189,6 +195,29 @@ export default function Charts() {
       // Calculate cumulative net worth (balance over time)
       const networth = cumulativeBalance + upToDateIncome - upToDateExpenses + upToDateTransferNet;
 
+      const upToDateExpensesLastYear = filteredExpenses.filter(e => {
+        const expenseDate = new Date(e.date);
+        return expenseDate <= periodEndLastYear;
+      }).reduce((sum, e) => sum + e.amount, 0);
+
+      const upToDateIncomeLastYear = filteredIncome.filter(i => {
+        const incomeDate = new Date(i.date);
+        return incomeDate <= periodEndLastYear;
+      }).reduce((sum, i) => sum + i.amount, 0);
+
+      const upToDateTransferNetLastYear = selectedAccount === 'all'
+        ? 0
+        : filteredTransfers.filter(t => {
+            const transferDate = new Date(t.date);
+            return transferDate <= periodEndLastYear;
+          }).reduce((sum, t) => {
+            if (t.to_account_id === selectedAccount) return sum + t.amount;
+            if (t.from_account_id === selectedAccount) return sum - t.amount;
+            return sum;
+          }, 0);
+
+      const networthLastYear = cumulativeBalance + upToDateIncomeLastYear - upToDateExpensesLastYear + upToDateTransferNetLastYear;
+
       return {
         name: period.label,
         fullName: period.fullLabel,
@@ -198,7 +227,8 @@ export default function Charts() {
         incomeOther: periodIncomeOther,
         expensesImportant: periodExpensesImportant,
         expensesOther: periodExpensesOther,
-        networth: networth
+        networth: networth,
+        networthLastYear: networthLastYear
       };
     });
   }, [viewMode, currentDate, filteredExpenses, filteredIncome, filteredTransfers, accounts, selectedAccount]);
@@ -425,12 +455,33 @@ export default function Charts() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis tickFormatter={(value) => formatNumber(value, 1)} />
-                  <Tooltip 
+                  <Tooltip
                     labelFormatter={(label, payload) => payload[0]?.payload?.fullName || label}
-                    formatter={(value) => `€${formatAmount(value)}`}
+                    content={({ payload, label }) => {
+                      if (!payload || payload.length === 0) return null;
+                      const data = payload[0]?.payload;
+                      if (!data) return null;
+                      const current = Number(data.networth) || 0;
+                      const lastYear = Number(data.networthLastYear) || 0;
+                      const delta = current - lastYear;
+                      const deltaPercent = formatDeltaPercent(current, lastYear);
+                      const deltaClass = delta > 0 ? 'text-emerald-600' : delta < 0 ? 'text-red-600' : 'text-slate-700';
+                      return (
+                        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-lg">
+                          <div className="font-medium text-slate-900 mb-1">
+                            {data.fullName || label}
+                          </div>
+                          <div className="text-slate-700">Net Worth: €{formatAmount(current)}</div>
+                          <div className="text-slate-700">Net Worth Last Year: €{formatAmount(lastYear)}</div>
+                          <div className={deltaClass}>Δ: €{formatAmount(delta)}</div>
+                          <div className={deltaClass}>Δ%: {deltaPercent}</div>
+                        </div>
+                      );
+                    }}
                   />
                   <Legend />
                   <Line type="monotone" dataKey="networth" stroke="#10b981" strokeWidth={2} name="Net Worth" />
+                  <Line type="monotone" dataKey="networthLastYear" stroke="#6ee7b7" strokeWidth={2} name="Net Worth Last Year" />
                 </LineChart>
               </ResponsiveContainer>
             </div>
