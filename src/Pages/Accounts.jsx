@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { motion } from 'framer-motion';
@@ -279,6 +279,10 @@ export default function Accounts() {
     return account ? account.name : 'Unknown';
   };
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [selectedAccount]);
+
   if (selectedAccount) {
     const account = accounts.find(a => a.id === selectedAccount);
     const balance = getAccountBalance(selectedAccount);
@@ -295,14 +299,6 @@ export default function Accounts() {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <Button
-              variant="ghost"
-              onClick={() => setSelectedAccount(null)}
-              className="mb-4 text-slate-600"
-            >
-              ← Back to Accounts
-            </Button>
-
             <div className="bg-white rounded-2xl p-6 mb-6 border border-slate-100">
               <div className="flex items-center gap-3 mb-4">
                 <div 
@@ -319,6 +315,27 @@ export default function Accounts() {
               <div className="text-center py-4">
                 <p className="text-sm text-slate-500 mb-1">Current Balance</p>
                 <p className="text-4xl font-bold text-slate-900 tabular-nums">€{formatAmount(balance)}</p>
+              </div>
+            </div>
+
+            <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur border-b border-slate-200/70 py-3 mb-4">
+              <div className="grid grid-cols-3 items-center">
+                <div className="justify-self-start">
+                  <Button
+                    variant="ghost"
+                    onClick={() => setSelectedAccount(null)}
+                    className="text-slate-600"
+                  >
+                    ← Back to Accounts
+                  </Button>
+                </div>
+                <div className="justify-self-center text-center">
+                  <div className="text-sm text-slate-500">{account.name}</div>
+                </div>
+                <div className="justify-self-end text-right">
+                  <div className="text-sm text-slate-500">Balance</div>
+                  <div className="font-semibold text-slate-900 tabular-nums">€{formatAmount(balance)}</div>
+                </div>
               </div>
             </div>
 
