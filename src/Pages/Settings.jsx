@@ -36,6 +36,7 @@ export default function Settings() {
   const [showIncomeCategories, setShowIncomeCategories] = useState(false);
   const [showBulkUpdater, setShowBulkUpdater] = useState(false);
   const [showRecurringModal, setShowRecurringModal] = useState(false);
+  const [showImportHelp, setShowImportHelp] = useState(false);
   const [numberFormat, setNumberFormatState] = useState(getNumberFormat());
   const [importing, setImporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -443,7 +444,7 @@ export default function Settings() {
       ['Type', 'Date', 'Amount', 'Account', 'Category', 'Subcategory', 'Notes', 'Cleared', 'Projected'],
       ['expense', '2026-01-01', '50.12', 'Cash', 'food', 'groceries', 'Weekly shopping', 'yes', 'no'],
       ['income', '2026-01-01', '1234.56', 'Bank', 'salary', '', 'Monthly salary', 'yes', 'no'],
-      ['transfer', '2026-01-01', '200.75', 'Bank', 'Savings', '', 'Monthly savings', '', ''],
+      ['transfer', '2026-01-01', '200.75', 'Bank', 'Savings', '', 'Monthly savings', 'yes', 'no'],
       ['income', '1970-01-01', '1000.00', 'Bank', 'SYSTEM - Starting Balance', '', 'starting balance', 'yes', 'yes']
     ];
 
@@ -596,9 +597,16 @@ export default function Settings() {
 
     setImporting(true);
     setImportProgress(0);
-    setImportLogs([]);
+    const attemptStamp = format(new Date(), 'yyyy-MM-dd HH:mm:ss');
+    setImportLogs([`Import attempt: ${file.name} @ ${attemptStamp}`]);
 
     try {
+      if (!file.name.toLowerCase().endsWith('.csv')) {
+        setImportLogs([`Import attempt: ${file.name} @ ${attemptStamp}`, 'Error: Invalid file type. Please upload a .csv file.']);
+        toast.error('Invalid file type');
+        setImporting(false);
+        return;
+      }
       const text = await file.text();
       // Advanced CSV parsing to handle quotes and newlines within cells
       const rows = [];
@@ -654,13 +662,107 @@ export default function Settings() {
       }
 
       if (rows.length < 2) {
-        setImportLogs(['Error: Invalid CSV file - no data rows found']);
+        setImportLogs([`Import attempt: ${file.name} @ ${attemptStamp}`, 'Error: Invalid CSV file - no data rows found']);
         toast.error('Invalid CSV file');
         setImporting(false);
         return;
       }
 
+      const expectedHeaders = ['Type', 'Date', 'Amount', 'Account', 'Category', 'Subcategory', 'Notes', 'Cleared', 'Projected'];
+      const headerRow = rows[0].map((cell) => (cell || '').trim());
+      const headerMatches =
+        headerRow.length === expectedHeaders.length &&
+        expectedHeaders.every((header, idx) => headerRow[idx] === header);
+      if (!headerMatches) {
+        setImportLogs([
+          `Import attempt: ${file.name} @ ${attemptStamp}`,
+          'Error: CSV headers do not match the template.',
+          `Expected: ${expectedHeaders.join(', ')}`,
+          `Found: ${headerRow.join(', ')}`,
+        ]);
+        toast.error('Invalid CSV headers');
+        setImporting(false);
+        return;
+      }
+
       const data = rows.slice(1).filter(row => row.length > 1 && row[0]);
+      const validationErrors = [];
+      const amountPattern = /^\d+(?:\.\d{1,2})?$/;
+      const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+      const isValidDateString = (value) => {
+        if (!datePattern.test(value)) return false;
+        const [y, m, d] = value.split('-').map(Number);
+        const parsed = new Date(y, m - 1, d);
+        return (
+          parsed.getFullYear() === y &&
+          parsed.getMonth() === m - 1 &&
+          parsed.getDate() === d
+        );
+      };
+
+      data.forEach((row, i) => {
+        const rowNumber = i + 2;
+        const type = (row[0] || '').trim();
+        const date = (row[1] || '').trim();
+        const amountStr = (row[2] || '').trim();
+        const accountName = (row[3] || '').trim();
+        const category = (row[4] || '').trim();
+        const subcategory = (row[5] || '').trim();
+        const cleared = (row[7] || '').trim();
+        const projected = (row[8] || '').trim();
+
+        const isSystemStartingBalance = category.toLowerCase() === 'system - starting balance';
+
+        if (!['expense', 'income', 'transfer'].includes(type)) {
+          validationErrors.push(`Row ${rowNumber}: Invalid type "${type}" (must be expense, income, or transfer)`);
+        }
+        if (!isValidDateString(date)) {
+          validationErrors.push(`Row ${rowNumber}: Invalid date "${date}" (must be YYYY-MM-DD)`);
+        }
+        if (!amountPattern.test(amountStr)) {
+          validationErrors.push(`Row ${rowNumber}: Invalid amount "${amountStr}" (use digits only, optional decimal with up to 2 digits, and "." as the decimal separator)`);
+        } else if (Number(amountStr) <= 0) {
+          validationErrors.push(`Row ${rowNumber}: Amount must be greater than 0`);
+        }
+        if (!accountName) {
+          validationErrors.push(`Row ${rowNumber}: Account is required`);
+        }
+        if (!category) {
+          validationErrors.push(`Row ${rowNumber}: Category is required`);
+        }
+        if (!subcategory && !isSystemStartingBalance && type !== 'transfer') {
+          validationErrors.push(`Row ${rowNumber}: Subcategory is required`);
+        }
+        if (cleared !== 'yes' && cleared !== 'no') {
+          validationErrors.push(`Row ${rowNumber}: Cleared must be "yes" or "no"`);
+        }
+        if (projected !== 'yes' && projected !== 'no') {
+          validationErrors.push(`Row ${rowNumber}: Projected must be "yes" or "no"`);
+        }
+
+        if (type === 'transfer' && !category) {
+          validationErrors.push(`Row ${rowNumber}: Transfer requires Category as destination account`);
+        }
+        if (isSystemStartingBalance) {
+          if (type === 'transfer') {
+            validationErrors.push(`Row ${rowNumber}: SYSTEM - Starting Balance must be income or expense`);
+          }
+          if (date !== '1970-01-01') {
+            validationErrors.push(`Row ${rowNumber}: Starting Balance date must be 1970-01-01`);
+          }
+        }
+      });
+
+      if (validationErrors.length > 0) {
+        const limitedErrors = validationErrors.slice(0, 20);
+        if (validationErrors.length > 20) {
+          limitedErrors.push(`...and ${validationErrors.length - 20} more error(s).`);
+        }
+        setImportLogs([`Import attempt: ${file.name} @ ${attemptStamp}`, ...limitedErrors]);
+        toast.error('Import failed: fix CSV errors');
+        setImporting(false);
+        return;
+      }
       const logs = [];
 
       // Refresh accounts list
@@ -683,22 +785,17 @@ export default function Settings() {
         const rowNumber = i + 2;
         
         try {
-          const type = row[0]?.toLowerCase();
-          const date = row[1];
+          const type = row[0]?.trim();
+          const date = row[1]?.trim();
           const amount = parseFloat(row[2]);
-          const accountName = row[3];
-          const category = row[4];
-          const subcategory = row[5] || undefined;
+          const accountName = row[3]?.trim();
+          const category = row[4]?.trim();
+          const subcategory = row[5]?.trim() || undefined;
           const notes = row[6] || undefined;
-          const cleared = row[7]?.toLowerCase() === 'yes';
-          const projected = row[8]?.toLowerCase() === 'yes';
+          const cleared = row[7]?.trim() === 'yes';
+          const projected = row[8]?.trim() === 'yes';
           const isSystemStartingBalance =
             (category || '').toLowerCase() === 'system - starting balance';
-
-          if (!type || !date || isNaN(amount) || !accountName) {
-            logs.push(`Row ${rowNumber}: Skipped - Missing required fields (type, date, amount, or account)`);
-            continue;
-          }
 
           // Auto-create account if it doesn't exist
           if (!accountsMap[accountName]) {
@@ -1791,6 +1888,54 @@ export default function Settings() {
                     <p className="text-sm text-slate-500">Get a CSV template with example data</p>
                   </div>
                 </button>
+                <div className="p-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowImportHelp((prev) => !prev)}
+                    className="w-full flex items-center justify-between text-left"
+                  >
+                    <div>
+                      <p className="font-medium text-slate-900">Import Help</p>
+                      <p className="text-sm text-slate-500">How to fill the CSV template</p>
+                    </div>
+                    {showImportHelp ? (
+                      <ChevronDown className="w-4 h-4 text-slate-500" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-slate-500" />
+                    )}
+                  </button>
+                  {showImportHelp && (
+                    <div className="mt-3 space-y-2 text-sm text-slate-600">
+                      <p>
+                        Use the provided CSV template exactly. Headers and column order must remain unchanged.
+                      </p>
+                      <p>
+                        <span className="font-medium">Type</span>: must be one of <code className="px-1">expense</code>, <code className="px-1">income</code>, or <code className="px-1">transfer</code> (lowercase).
+                      </p>
+                      <p>
+                        <span className="font-medium">Date</span>: must be in <code className="px-1">YYYY-MM-DD</code> format.
+                      </p>
+                      <p>
+                        <span className="font-medium">Amount</span>: use positive numbers only, no thousand separators, and up to two decimals (e.g., <code className="px-1">1234</code> or <code className="px-1">1234.50</code>). The type determines the sign.
+                      </p>
+                      <p>
+                        <span className="font-medium">Accounts / Categories / Subcategories</span>: required fields. Values are trimmed (leading/trailing spaces removed). The exact spelling is preserved.
+                      </p>
+                      <p>
+                        <span className="font-medium">Notes</span>: can include commas or new lines if the value is quoted.
+                      </p>
+                      <p>
+                        <span className="font-medium">Cleared / Projected</span>: must be <code className="px-1">yes</code> or <code className="px-1">no</code> (lowercase).
+                      </p>
+                      <p>
+                        <span className="font-medium">Starting Balance</span>: use category <code className="px-1">SYSTEM - Starting Balance</code> on an income or expense row. If balance is 0, omit it.
+                      </p>
+                      <p>
+                        <span className="font-medium">Transfers</span>: set <code className="px-1">Account</code> as the <em>from</em> account and <code className="px-1">Category</code> as the <em>to</em> account.
+                      </p>
+                    </div>
+                  )}
+                </div>
 
                 <button
                   onClick={handleExport}
