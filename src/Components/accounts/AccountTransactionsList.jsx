@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { format, parseISO, startOfMonth } from 'date-fns';
 import { ArrowUpRight, ArrowDownRight, ArrowLeftRight, Edit, Trash2, Copy, AlertCircle, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ export default function AccountTransactionsList({
   const [duplicatingTransaction, setDuplicatingTransaction] = useState(null);
   const [duplicatingType, setDuplicatingType] = useState(null);
   const [openActionsId, setOpenActionsId] = useState(null);
+  const [visibleCount, setVisibleCount] = useState(200);
 
   const getCreatedStamp = (t) => t?.created_at ?? t?.created_date ?? t?.date;
   const getUpdatedStamp = (t) => t?.updated_at ?? t?.updated_date ?? getCreatedStamp(t);
@@ -28,9 +29,25 @@ export default function AccountTransactionsList({
   const startingBalanceTransactions = transactions.filter(isStartingBalance);
   const displayTransactions = transactions.filter((t) => !isStartingBalance(t));
 
+  useEffect(() => {
+    setVisibleCount(200);
+  }, [selectedAccount]);
+
+  const sortedDisplayTransactions = useMemo(() => {
+    return [...displayTransactions].sort((a, b) => {
+      const dateCompare = new Date(b.date) - new Date(a.date);
+      if (dateCompare !== 0) return dateCompare;
+      const createdCompare = new Date(getCreatedStamp(b)) - new Date(getCreatedStamp(a));
+      if (createdCompare !== 0) return createdCompare;
+      return new Date(getUpdatedStamp(b)) - new Date(getUpdatedStamp(a));
+    });
+  }, [displayTransactions]);
+
+  const visibleTransactions = sortedDisplayTransactions.slice(0, visibleCount);
+
   // Group by month
   const groupedByMonth = {};
-  displayTransactions.forEach(t => {
+  visibleTransactions.forEach(t => {
     const monthKey = format(parseISO(t.date), 'yyyy-MM');
     if (!groupedByMonth[monthKey]) {
       groupedByMonth[monthKey] = [];
@@ -285,6 +302,17 @@ export default function AccountTransactionsList({
           </div>
         </div>
       ))}
+
+      {visibleTransactions.length < sortedDisplayTransactions.length && (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            onClick={() => setVisibleCount((prev) => prev + 200)}
+          >
+            Load more
+          </Button>
+        </div>
+      )}
 
       {startingBalanceTransactions.length > 0 && (
         (() => {

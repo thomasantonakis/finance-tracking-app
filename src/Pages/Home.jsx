@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { motion } from 'framer-motion';
@@ -44,6 +44,7 @@ export default function Home() {
     minAmount: '',
     maxAmount: '',
   });
+  const [searchAppliedFilters, setSearchAppliedFilters] = useState(searchFilters);
 
   const { data: expenses = [], isLoading: loadingExpenses } = useQuery({
     queryKey: ['expenses'],
@@ -265,26 +266,50 @@ export default function Home() {
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 10);
 
-  const allSearchTransactions = [
-    ...expenses.map(e => ({ ...e, type: 'expense' })),
-    ...income.map(i => ({ ...i, type: 'income' })),
-    ...transfers.map(t => ({ ...t, type: 'transfer' }))
-  ]
-    .filter((t) => t.type === 'transfer' || !isSystemStarting(t));
+  useEffect(() => {
+    if (!showSearch) return;
+    setSearchAppliedFilters({
+      query: '',
+      dateFrom: '',
+      dateTo: '',
+      minAmount: '',
+      maxAmount: '',
+    });
+  }, [showSearch]);
 
-  const filteredSearchTransactions = allSearchTransactions.filter((t) => {
-    if (searchFilters.query.trim()) {
-      const q = searchFilters.query.trim().toLowerCase();
-      const hay = `${t.category || ''} ${t.subcategory || ''} ${t.notes || ''}`.toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
-    if (searchFilters.dateFrom && new Date(t.date) < new Date(searchFilters.dateFrom)) return false;
-    if (searchFilters.dateTo && new Date(t.date) > new Date(searchFilters.dateTo)) return false;
-    const amount = Number(t.amount) || 0;
-    if (searchFilters.minAmount !== '' && amount < Number(searchFilters.minAmount)) return false;
-    if (searchFilters.maxAmount !== '' && amount > Number(searchFilters.maxAmount)) return false;
-    return true;
-  }).sort((a, b) => new Date(b.date) - new Date(a.date));
+  const hasSearchCriteria = Boolean(
+    searchAppliedFilters.query.trim() ||
+    searchAppliedFilters.dateFrom ||
+    searchAppliedFilters.dateTo ||
+    searchAppliedFilters.minAmount !== '' ||
+    searchAppliedFilters.maxAmount !== ''
+  );
+
+  const allSearchTransactions = useMemo(() => {
+    if (!showSearch) return [];
+    return [
+      ...expenses.map(e => ({ ...e, type: 'expense' })),
+      ...income.map(i => ({ ...i, type: 'income' })),
+      ...transfers.map(t => ({ ...t, type: 'transfer' }))
+    ].filter((t) => t.type === 'transfer' || !isSystemStarting(t));
+  }, [showSearch, expenses, income, transfers]);
+
+  const filteredSearchTransactions = useMemo(() => {
+    if (!hasSearchCriteria) return [];
+    return allSearchTransactions.filter((t) => {
+      if (searchAppliedFilters.query.trim()) {
+        const q = searchAppliedFilters.query.trim().toLowerCase();
+        const hay = `${t.category || ''} ${t.subcategory || ''} ${t.notes || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (searchAppliedFilters.dateFrom && new Date(t.date) < new Date(searchAppliedFilters.dateFrom)) return false;
+      if (searchAppliedFilters.dateTo && new Date(t.date) > new Date(searchAppliedFilters.dateTo)) return false;
+      const amount = Number(t.amount) || 0;
+      if (searchAppliedFilters.minAmount !== '' && amount < Number(searchAppliedFilters.minAmount)) return false;
+      if (searchAppliedFilters.maxAmount !== '' && amount > Number(searchAppliedFilters.maxAmount)) return false;
+      return true;
+    }).sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [hasSearchCriteria, allSearchTransactions, searchAppliedFilters]);
 
   const isLoading = loadingExpenses || loadingIncome;
 
@@ -338,7 +363,28 @@ export default function Home() {
           />
         </div>
       </div>
-      <Dialog open={showSearch} onOpenChange={setShowSearch}>
+      <Dialog
+        open={showSearch}
+        onOpenChange={(open) => {
+          setShowSearch(open);
+          if (!open) {
+            setSearchFilters({
+              query: '',
+              dateFrom: '',
+              dateTo: '',
+              minAmount: '',
+              maxAmount: '',
+            });
+            setSearchAppliedFilters({
+              query: '',
+              dateFrom: '',
+              dateTo: '',
+              minAmount: '',
+              maxAmount: '',
+            });
+          }
+        }}
+      >
         <DialogContent className="max-w-7xl">
           <DialogHeader>
             <DialogTitle>Search Transactions</DialogTitle>
@@ -350,6 +396,30 @@ export default function Home() {
                 value={searchFilters.query}
                 onChange={(e) => setSearchFilters((prev) => ({ ...prev, query: e.target.value }))}
               />
+              <div className="flex items-center justify-end gap-2 md:justify-start">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSearchFilters({
+                      query: '',
+                      dateFrom: '',
+                      dateTo: '',
+                      minAmount: '',
+                      maxAmount: '',
+                    });
+                    setSearchAppliedFilters({
+                      query: '',
+                      dateFrom: '',
+                      dateTo: '',
+                      minAmount: '',
+                      maxAmount: '',
+                    });
+                  }}
+                >
+                  Clear
+                </Button>
+                <Button onClick={() => setSearchAppliedFilters(searchFilters)}>Search</Button>
+              </div>
               <div className="grid grid-cols-2 gap-2 md:col-span-2">
                 <Input
                   type="date"
@@ -379,11 +449,13 @@ export default function Home() {
             </div>
 
             <div className="text-sm text-slate-500">
-              {filteredSearchTransactions.length} transaction(s) found
+              {hasSearchCriteria
+                ? `${filteredSearchTransactions.length} transaction(s) found`
+                : 'Set at least one filter, then click Search.'}
             </div>
 
             <div className="space-y-2">
-              {filteredSearchTransactions.map((transaction) => (
+              {hasSearchCriteria && filteredSearchTransactions.map((transaction) => (
                 <div
                   key={transaction.id}
                   className="flex items-center gap-4 p-3 rounded-xl border border-slate-100 bg-white"
@@ -469,7 +541,7 @@ export default function Home() {
                   </div>
                 </div>
               ))}
-              {filteredSearchTransactions.length === 0 && (
+              {hasSearchCriteria && filteredSearchTransactions.length === 0 && (
                 <p className="text-sm text-slate-400">No transactions match your filters.</p>
               )}
             </div>
