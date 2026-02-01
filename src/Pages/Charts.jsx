@@ -668,33 +668,46 @@ export default function Charts() {
                 <p className="text-3xl font-bold text-red-600 tabular-nums">€{formatAmount(totalExpenses)}</p>
               </div>
               {expensePieData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={250}>
-                  <PieChart>
-                    <Pie
-                      data={expensePieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={90}
-                      fill="#8884d8"
-                      paddingAngle={2}
-                      dataKey="value"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      startAngle={90}
-                      endAngle={-270}
-                      onClick={() => {
-                        setPieModal({ open: true, type: 'expense' });
-                        setExpandedCategory(null);
-                        setExpandedSubcategory(null);
-                      }}
-                    >
-                      {expensePieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => `€${formatAmount(value)}`} />
-                  </PieChart>
-                </ResponsiveContainer>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    setPieModal({ open: true, type: 'expense' });
+                    setExpandedCategory(null);
+                    setExpandedSubcategories([]);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      setPieModal({ open: true, type: 'expense' });
+                      setExpandedCategory(null);
+                      setExpandedSubcategories([]);
+                    }
+                  }}
+                  className="cursor-pointer"
+                >
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie
+                        data={expensePieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={90}
+                        fill="#8884d8"
+                        paddingAngle={2}
+                        dataKey="value"
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        startAngle={90}
+                        endAngle={-270}
+                      >
+                        {expensePieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => `€${formatAmount(value)}`} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
               ) : (
                 <p className="text-sm text-slate-400 text-center py-8">No expenses data</p>
               )}
@@ -706,33 +719,46 @@ export default function Charts() {
                 <p className="text-3xl font-bold text-green-600 tabular-nums">€{formatAmount(totalIncome)}</p>
               </div>
               {incomePieData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={250}>
-                  <PieChart>
-                    <Pie
-                      data={incomePieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={90}
-                      fill="#8884d8"
-                      paddingAngle={2}
-                      dataKey="value"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      startAngle={90}
-                      endAngle={-270}
-                      onClick={() => {
-                        setPieModal({ open: true, type: 'income' });
-                        setExpandedCategory(null);
-                        setExpandedSubcategory(null);
-                      }}
-                    >
-                      {incomePieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => `€${formatAmount(value)}`} />
-                  </PieChart>
-                </ResponsiveContainer>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    setPieModal({ open: true, type: 'income' });
+                    setExpandedCategory(null);
+                    setExpandedSubcategories([]);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      setPieModal({ open: true, type: 'income' });
+                      setExpandedCategory(null);
+                      setExpandedSubcategories([]);
+                    }
+                  }}
+                  className="cursor-pointer"
+                >
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie
+                        data={incomePieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={90}
+                        fill="#8884d8"
+                        paddingAngle={2}
+                        dataKey="value"
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        startAngle={90}
+                        endAngle={-270}
+                      >
+                        {incomePieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => `€${formatAmount(value)}`} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
               ) : (
                 <p className="text-sm text-slate-400 text-center py-8">No income data</p>
               )}
@@ -741,7 +767,10 @@ export default function Charts() {
         </motion.div>
       </div>
       <Dialog open={pieModal.open} onOpenChange={(open) => !open && setPieModal({ open: false, type: pieModal.type })}>
-        <DialogContent className="max-w-4xl p-0 overflow-hidden">
+        <DialogContent
+          className="max-w-4xl p-0 overflow-hidden"
+          style={{ maxHeight: 'calc(100vh - 10rem - env(safe-area-inset-bottom))' }}
+        >
           <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 text-white p-5">
             <div className="flex items-start justify-between">
               <div>
@@ -775,7 +804,10 @@ export default function Charts() {
               )}
             </div>
           </div>
-          <div className="max-h-[70vh] overflow-auto p-5 space-y-4 bg-slate-50">
+          <div
+            className="overflow-auto p-5 pb-20 space-y-4 bg-slate-50"
+            style={{ maxHeight: 'calc(100vh - 17rem - env(safe-area-inset-bottom))' }}
+          >
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
               <div className="grid grid-cols-[1.6fr_0.7fr_0.6fr_1fr] gap-3 px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">
                 <div>Category</div>

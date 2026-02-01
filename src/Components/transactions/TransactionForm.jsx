@@ -77,6 +77,10 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
     queryKey: [entityName],
     queryFn: () => base44.entities[entityName].list(),
   });
+  const isStartingBalanceLabel = (value) => {
+    const v = (value || '').trim().toLowerCase();
+    return v === 'starting balance' || v === 'system - starting balance';
+  };
 
   // Deduplicate categories by name (keep first occurrence)
   const deduplicatedCategories = customCategories.length > 0 
@@ -85,6 +89,7 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
         .filter((cat, index, self) => 
           index === self.findIndex(c => c.name.toLowerCase() === cat.name.toLowerCase())
         )
+        .filter((cat) => !isStartingBalanceLabel(cat.name))
     : (type === 'income' ? incomeCategories : expenseCategories).map(cat => ({ name: cat, color: '#64748b' }));
 
   const categories = React.useMemo(() => {
@@ -110,7 +115,7 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
     const totals = transactions.reduce((acc, t) => {
       if (filterSubcategoryByCategory && selectedCategory && (t.category || '').toLowerCase() !== selectedCategory) return acc;
       const raw = (t.subcategory || '').trim();
-      if (!raw) return acc;
+      if (!raw || isStartingBalanceLabel(raw)) return acc;
       const key = raw.toLowerCase();
       if (!acc[key]) acc[key] = { name: raw, total: 0 };
       acc[key].total += t.amount || 0;

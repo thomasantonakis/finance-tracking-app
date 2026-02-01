@@ -15,7 +15,7 @@ export function Dialog({ open, onOpenChange, children }) {
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-[60] flex items-center justify-center px-4 py-6 pb-[calc(5rem+env(safe-area-inset-bottom))]"
       onClick={() => onOpenChange?.(false)}
     >
       <div className="absolute inset-0 bg-black/40" />
