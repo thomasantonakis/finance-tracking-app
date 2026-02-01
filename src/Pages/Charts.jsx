@@ -5,10 +5,11 @@ import { motion } from 'framer-motion';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfYear, endOfYear, eachMonthOfInterval, endOfDay, addYears, subMonths } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { ensureStartingBalanceTransactions, formatAmount, formatNumber, useSessionState } from '@/utils';
+import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, AreaChart, Area } from 'recharts';
+import { ensureStartingBalanceTransactions, formatAmount, formatNumber, getNumberFormat, useSessionState } from '@/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 export default function Charts() {
@@ -20,6 +21,12 @@ export default function Charts() {
   const [showProjected, setShowProjected] = useState(true);
   const [showCumulativeBars, setShowCumulativeBars] = useState(false);
   const [detailChartMode, setDetailChartMode] = useState('bars');
+  const [showCumulativeMonthlyCategories, setShowCumulativeMonthlyCategories] = useState(false);
+  const [monthlyCategoryView, setMonthlyCategoryView] = useState('column');
+  const [showCumulativeYearlyCategories, setShowCumulativeYearlyCategories] = useState(false);
+  const [yearlyCategoryView, setYearlyCategoryView] = useState('column');
+  const [yearRangeStart, setYearRangeStart] = useState('2015');
+  const [yearRangeEnd, setYearRangeEnd] = useState(() => String(new Date().getFullYear() - 1));
   const [pieModal, setPieModal] = useState({ open: false, type: 'expense' });
   const [expandedCategory, setExpandedCategory] = useState(null);
   const [expandedSubcategories, setExpandedSubcategories] = useState([]);
@@ -83,6 +90,16 @@ export default function Charts() {
   const formatDeltaPercent = (current, last) => {
     if (!last) return current === 0 ? '0.0%' : '∞%';
     return `${formatNumber((current / last - 1) * 100, 1)}%`;
+  };
+
+  const formatCompactNumber = (value) => {
+    const num = Number(value) || 0;
+    const abs = Math.abs(num);
+    const sign = num < 0 ? '-' : '';
+    if (abs >= 1_000_000_000) return `${sign}${Math.round(abs / 1_000_000_000)}B`;
+    if (abs >= 1_000_000) return `${sign}${Math.round(abs / 1_000_000)}M`;
+    if (abs >= 1_000) return `${sign}${Math.round(abs / 1_000)}K`;
+    return `${sign}${Math.round(abs)}`;
   };
 
   const filteredExpenses = filterTransactions(expenses);
@@ -340,6 +357,163 @@ export default function Charts() {
       return d >= periodStart && d <= periodEnd;
     });
   }, [filteredExpenses, periodStart, periodEnd]);
+
+  const monthlyExpenseByCategory = useMemo(() => {
+    const yearStart = startOfYear(currentDate);
+    const yearEnd = endOfYear(currentDate);
+    const months = eachMonthOfInterval({ start: yearStart, end: yearEnd });
+    const monthLabels = months.map((date) => ({
+      key: format(date, 'yyyy-MM'),
+      label: format(date, 'MMM'),
+      date,
+    }));
+
+    const totalsByCategory = {};
+    const byMonthCategory = {};
+
+    filteredExpenses.forEach((e) => {
+      const d = new Date(e.date);
+      if (d < yearStart || d > yearEnd) return;
+      const monthKey = format(d, 'yyyy-MM');
+      const cat = (e.category || '').trim();
+      if (!cat) return;
+      if (!byMonthCategory[monthKey]) byMonthCategory[monthKey] = {};
+      byMonthCategory[monthKey][cat] = (byMonthCategory[monthKey][cat] || 0) + (e.amount || 0);
+      totalsByCategory[cat] = (totalsByCategory[cat] || 0) + (e.amount || 0);
+    });
+
+    const sortedCategories = Object.entries(totalsByCategory)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name]) => name);
+
+    const topLimit = 8;
+    const topCategories = sortedCategories.slice(0, topLimit);
+    const hasOther = sortedCategories.length > topLimit;
+
+    let cumulative = {};
+    const data = monthLabels.map((m) => {
+      const row = { name: m.label };
+      let otherTotal = 0;
+      topCategories.forEach((cat) => {
+        const value = byMonthCategory[m.key]?.[cat] || 0;
+        if (showCumulativeMonthlyCategories) {
+          cumulative[cat] = (cumulative[cat] || 0) + value;
+          row[cat] = cumulative[cat];
+        } else {
+          row[cat] = value;
+        }
+      });
+      if (hasOther) {
+        sortedCategories.slice(topLimit).forEach((cat) => {
+          otherTotal += byMonthCategory[m.key]?.[cat] || 0;
+        });
+        if (showCumulativeMonthlyCategories) {
+          cumulative.Other = (cumulative.Other || 0) + otherTotal;
+          row.Other = cumulative.Other;
+        } else {
+          row.Other = otherTotal;
+        }
+      }
+      return row;
+    });
+
+    return { data, categories: topCategories, hasOther };
+  }, [filteredExpenses, currentDate, showCumulativeMonthlyCategories]);
+
+  const yearlyExpenseByCategory = useMemo(() => {
+    const startYear = Number(yearRangeStart);
+    const endYear = Number(yearRangeEnd);
+    if (!Number.isFinite(startYear) || !Number.isFinite(endYear) || endYear < startYear) {
+      return { data: [], categories: [], hasOther: false };
+    }
+    const years = [];
+    for (let y = startYear; y <= endYear; y += 1) {
+      years.push({ key: String(y), label: String(y) });
+    }
+
+    const totalsByCategory = {};
+    const byYearCategory = {};
+
+    filteredExpenses.forEach((e) => {
+      const d = new Date(e.date);
+      const y = String(d.getFullYear());
+      if (Number(y) < startYear || Number(y) > endYear) return;
+      const cat = (e.category || '').trim();
+      if (!cat) return;
+      if (!byYearCategory[y]) byYearCategory[y] = {};
+      byYearCategory[y][cat] = (byYearCategory[y][cat] || 0) + (e.amount || 0);
+      totalsByCategory[cat] = (totalsByCategory[cat] || 0) + (e.amount || 0);
+    });
+
+    const sortedCategories = Object.entries(totalsByCategory)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name]) => name);
+
+    const topLimit = 8;
+    const topCategories = sortedCategories.slice(0, topLimit);
+    const hasOther = sortedCategories.length > topLimit;
+
+    let cumulative = {};
+    const data = years.map((y) => {
+      const row = { name: y.label };
+      let otherTotal = 0;
+      topCategories.forEach((cat) => {
+        const value = byYearCategory[y.key]?.[cat] || 0;
+        if (showCumulativeYearlyCategories) {
+          cumulative[cat] = (cumulative[cat] || 0) + value;
+          row[cat] = cumulative[cat];
+        } else {
+          row[cat] = value;
+        }
+      });
+      if (hasOther) {
+        sortedCategories.slice(topLimit).forEach((cat) => {
+          otherTotal += byYearCategory[y.key]?.[cat] || 0;
+        });
+        if (showCumulativeYearlyCategories) {
+          cumulative.Other = (cumulative.Other || 0) + otherTotal;
+          row.Other = cumulative.Other;
+        } else {
+          row.Other = otherTotal;
+        }
+      }
+      return row;
+    });
+
+    return { data, categories: topCategories, hasOther };
+  }, [filteredExpenses, yearRangeStart, yearRangeEnd, showCumulativeYearlyCategories]);
+
+  const yearlyCategoryLegend = useMemo(() => {
+    const items = [
+      ...yearlyExpenseByCategory.categories.map((cat) => ({
+        key: cat,
+        name: cat,
+        color: getCategoryColor(cat, 'expense'),
+      })),
+    ];
+    if (yearlyExpenseByCategory.hasOther) {
+      items.push({ key: 'Other', name: 'Other', color: '#cbd5f5' });
+    }
+    return items;
+  }, [yearlyExpenseByCategory, getCategoryColor]);
+
+  const monthlyCategorySeries = useMemo(() => {
+    const base = monthlyExpenseByCategory.categories.filter((cat) => cat !== 'Other');
+    return monthlyExpenseByCategory.hasOther ? [...base, 'Other'] : base;
+  }, [monthlyExpenseByCategory]);
+
+  const monthlyCategoryLegend = useMemo(() => {
+    return monthlyCategorySeries.map((key) => ({
+      key,
+      name: key,
+      color: key === 'Other' ? '#cbd5f5' : getCategoryColor(key, 'expense'),
+    }));
+  }, [monthlyCategorySeries, getCategoryColor]);
+
+  const monthlyCategorySeriesStack = useMemo(() => {
+    const rest = monthlyCategorySeries.filter((cat) => cat !== 'Other');
+    return monthlyCategorySeries.includes('Other') ? [...rest, 'Other'] : rest;
+  }, [monthlyCategorySeries]);
 
   const incomeInPeriod = useMemo(() => {
     return filteredIncome.filter((i) => {
@@ -763,6 +937,334 @@ export default function Charts() {
                 <p className="text-sm text-slate-400 text-center py-8">No income data</p>
               )}
             </div>
+          </div>
+
+          {viewMode === 'months' && (
+          <div className="bg-white rounded-2xl p-6 border border-slate-100 mt-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-slate-900">Monthly Expenses by Category</h2>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-slate-500">{format(currentDate, 'yyyy')}</span>
+                <button
+                  type="button"
+                  onClick={() => setMonthlyCategoryView((prev) => (prev === 'column' ? 'area' : 'column'))}
+                  className={`rounded-full border px-4 py-1.5 text-sm font-medium transition ${
+                    monthlyCategoryView === 'column'
+                      ? 'border-slate-900 bg-slate-900 text-white'
+                      : 'border-slate-200 bg-white text-slate-600'
+                  }`}
+                >
+                  {monthlyCategoryView === 'column' ? 'Columns' : 'Area'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCumulativeMonthlyCategories((prev) => !prev)}
+                  className={`rounded-full border px-4 py-1.5 text-sm font-medium transition ${
+                    showCumulativeMonthlyCategories
+                      ? 'border-slate-900 bg-slate-900 text-white'
+                      : 'border-slate-200 bg-white text-slate-600'
+                  }`}
+                >
+                  {showCumulativeMonthlyCategories ? 'Cumulative' : 'Selective'}
+                </button>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={320}>
+              {monthlyCategoryView === 'column' ? (
+                <BarChart
+                  data={monthlyExpenseByCategory.data}
+                  barCategoryGap="20%"
+                  key={`monthly-bars-${format(currentDate, 'yyyy')}-${monthlyCategorySeries.join('|')}-${showCumulativeMonthlyCategories}`}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis tickFormatter={(value) => formatNumber(value, 1)} />
+                  <Tooltip
+                    content={({ label, payload }) => {
+                      if (!payload || payload.length === 0) return null;
+                      const items = monthlyCategoryLegend
+                        .map((legend) => payload.find((p) => p.dataKey === legend.key))
+                        .filter(Boolean);
+                      return (
+                        <div className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] shadow-sm">
+                          <div className="text-slate-600">{label}</div>
+                        {items.map((item) => (
+                          <div key={item.dataKey} className="flex items-center justify-between gap-3">
+                            <span className="flex items-center gap-2 text-slate-600">
+                              <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: item.color }} />
+                              {item.name}
+                            </span>
+                            <span className="text-slate-800 tabular-nums">€{formatAmount(item.value, 0)}</span>
+                          </div>
+                        ))}
+                        </div>
+                      );
+                    }}
+                  />
+                  <Legend
+                    content={() => (
+                      <div className="flex flex-wrap justify-center gap-3 text-xs mt-2">
+                        {monthlyCategoryLegend.map((item) => (
+                          <span key={item.key} className="flex items-center gap-2 text-slate-600">
+                            <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: item.color }} />
+                            {item.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  />
+                  {monthlyCategorySeriesStack.map((cat) => (
+                    <Bar
+                      key={cat}
+                      dataKey={cat}
+                      stackId="expenses"
+                      fill={cat === 'Other' ? '#cbd5f5' : getCategoryColor(cat, 'expense')}
+                      name={cat}
+                    />
+                  ))}
+                </BarChart>
+              ) : (
+                <AreaChart
+                  data={monthlyExpenseByCategory.data}
+                  key={`monthly-area-${format(currentDate, 'yyyy')}-${monthlyCategorySeries.join('|')}-${showCumulativeMonthlyCategories}`}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis tickFormatter={(value) => formatNumber(value, 1)} />
+                  <Tooltip
+                    content={({ label, payload }) => {
+                      if (!payload || payload.length === 0) return null;
+                      const items = monthlyCategoryLegend
+                        .map((legend) => payload.find((p) => p.dataKey === legend.key))
+                        .filter(Boolean);
+                      return (
+                        <div className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] shadow-sm">
+                          <div className="text-slate-600">{label}</div>
+                          {items.map((item) => (
+                            <div key={item.dataKey} className="flex items-center justify-between gap-3">
+                              <span className="flex items-center gap-2 text-slate-600">
+                                <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: item.color }} />
+                                {item.name}
+                              </span>
+                            <span className="text-slate-800 tabular-nums">€{formatAmount(item.value, 0)}</span>
+                          </div>
+                        ))}
+                        </div>
+                      );
+                    }}
+                  />
+                  <Legend
+                    content={() => (
+                      <div className="flex flex-wrap justify-center gap-3 text-xs mt-2">
+                        {monthlyCategoryLegend.map((item) => (
+                          <span key={item.key} className="flex items-center gap-2 text-slate-600">
+                            <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: item.color }} />
+                            {item.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  />
+                  {monthlyCategorySeriesStack.map((cat) => (
+                    <Area
+                      key={cat}
+                      dataKey={cat}
+                      stackId="expenses"
+                      stroke={cat === 'Other' ? '#cbd5f5' : getCategoryColor(cat, 'expense')}
+                      fill={cat === 'Other' ? '#cbd5f5' : getCategoryColor(cat, 'expense')}
+                      fillOpacity={cat === 'Other' ? 0.35 : 0.3}
+                      type="monotone"
+                      name={cat}
+                    />
+                  ))}
+                </AreaChart>
+              )}
+            </ResponsiveContainer>
+            <p className="text-xs text-slate-500 mt-2">
+              Showing top {monthlyExpenseByCategory.categories.length} categories
+              {monthlyExpenseByCategory.hasOther ? ' + Other' : ''}.
+            </p>
+          </div>
+          )}
+
+          <div className="bg-white rounded-2xl p-6 border border-slate-100 mt-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <h2 className="text-lg font-bold text-slate-900">Yearly Expenses by Category</h2>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min="2000"
+                    max="2100"
+                    className="w-24"
+                    value={yearRangeStart}
+                    onChange={(e) => setYearRangeStart(e.target.value)}
+                  />
+                  <span className="text-sm text-slate-500">to</span>
+                  <Input
+                    type="number"
+                    min="2000"
+                    max="2100"
+                    className="w-24"
+                    value={yearRangeEnd}
+                    onChange={(e) => setYearRangeEnd(e.target.value)}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setYearlyCategoryView((prev) => (prev === 'column' ? 'area' : 'column'))}
+                  className={`rounded-full border px-4 py-1.5 text-sm font-medium transition ${
+                    yearlyCategoryView === 'column'
+                      ? 'border-slate-900 bg-slate-900 text-white'
+                      : 'border-slate-200 bg-white text-slate-600'
+                  }`}
+                >
+                  {yearlyCategoryView === 'column' ? 'Columns' : 'Area'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCumulativeYearlyCategories((prev) => !prev)}
+                  className={`rounded-full border px-4 py-1.5 text-sm font-medium transition ${
+                    showCumulativeYearlyCategories
+                      ? 'border-slate-900 bg-slate-900 text-white'
+                      : 'border-slate-200 bg-white text-slate-600'
+                  }`}
+                >
+                  {showCumulativeYearlyCategories ? 'Cumulative' : 'Selective'}
+                </button>
+              </div>
+            </div>
+            {yearlyExpenseByCategory.data.length === 0 ? (
+              <p className="text-sm text-slate-400">Pick a valid year range to display data.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={320}>
+                {yearlyCategoryView === 'column' ? (
+                  <BarChart data={yearlyExpenseByCategory.data} barCategoryGap="20%" stackOrder="reverse">
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis tickFormatter={(value) => formatCompactNumber(value)} />
+                    <Tooltip
+                      content={({ label, payload }) => {
+                        if (!payload || payload.length === 0) return null;
+                        const items = yearlyCategoryLegend
+                          .map((legend) => payload.find((p) => p.dataKey === legend.key))
+                          .filter(Boolean);
+                        return (
+                          <div className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] shadow-sm">
+                            <div className="text-slate-600">{label}</div>
+                            {items.map((item) => (
+                              <div key={item.dataKey} className="flex items-center justify-between gap-3">
+                                <span className="flex items-center gap-2 text-slate-600">
+                                  <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: item.color }} />
+                                  {item.name}
+                                </span>
+                                <span className="text-slate-800 tabular-nums">€{formatAmount(item.value, 0)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }}
+                    />
+                    <Legend
+                      content={() => (
+                        <div className="flex flex-wrap justify-center gap-3 text-xs mt-2">
+                          {yearlyCategoryLegend.map((item) => (
+                            <span key={item.key} className="flex items-center gap-2 text-slate-600">
+                              <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: item.color }} />
+                              {item.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    />
+                    {yearlyExpenseByCategory.categories.map((cat) => (
+                      <Bar
+                        key={cat}
+                        dataKey={cat}
+                        stackId="expenses"
+                        fill={getCategoryColor(cat, 'expense')}
+                        name={cat}
+                      />
+                    ))}
+                    {yearlyExpenseByCategory.hasOther && (
+                      <Bar
+                        dataKey="Other"
+                        stackId="expenses"
+                        fill="#cbd5f5"
+                        name="Other"
+                      />
+                    )}
+                  </BarChart>
+                ) : (
+                  <AreaChart data={yearlyExpenseByCategory.data} stackOrder="reverse">
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis tickFormatter={(value) => formatCompactNumber(value)} />
+                    <Tooltip
+                      content={({ label, payload }) => {
+                        if (!payload || payload.length === 0) return null;
+                        const items = yearlyCategoryLegend
+                          .map((legend) => payload.find((p) => p.dataKey === legend.key))
+                          .filter(Boolean);
+                        return (
+                          <div className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] shadow-sm">
+                            <div className="text-slate-600">{label}</div>
+                            {items.map((item) => (
+                              <div key={item.dataKey} className="flex items-center justify-between gap-3">
+                                <span className="flex items-center gap-2 text-slate-600">
+                                  <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: item.color }} />
+                                  {item.name}
+                                </span>
+                                <span className="text-slate-800 tabular-nums">€{formatAmount(item.value, 0)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }}
+                    />
+                    <Legend
+                      content={() => (
+                        <div className="flex flex-wrap justify-center gap-3 text-xs mt-2">
+                          {yearlyCategoryLegend.map((item) => (
+                            <span key={item.key} className="flex items-center gap-2 text-slate-600">
+                              <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: item.color }} />
+                              {item.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    />
+                    {yearlyExpenseByCategory.categories.map((cat) => (
+                      <Area
+                        key={cat}
+                        dataKey={cat}
+                        stackId="expenses"
+                        stroke={getCategoryColor(cat, 'expense')}
+                        fill={getCategoryColor(cat, 'expense')}
+                        fillOpacity={0.3}
+                        type="monotone"
+                        name={cat}
+                      />
+                    ))}
+                    {yearlyExpenseByCategory.hasOther && (
+                      <Area
+                        dataKey="Other"
+                        stackId="expenses"
+                        stroke="#cbd5f5"
+                        fill="#cbd5f5"
+                        fillOpacity={0.35}
+                        type="monotone"
+                        name="Other"
+                      />
+                    )}
+                  </AreaChart>
+                )}
+              </ResponsiveContainer>
+            )}
+            <p className="text-xs text-slate-500 mt-2">
+              Showing top {yearlyExpenseByCategory.categories.length} categories
+              {yearlyExpenseByCategory.hasOther ? ' + Other' : ''}.
+            </p>
           </div>
         </motion.div>
       </div>
