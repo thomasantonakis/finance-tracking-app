@@ -404,8 +404,8 @@ export default function Accounts() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">Total Balance</p>
-                <p className="text-2xl font-bold text-slate-900 tabular-nums">€{formatAmount(totalBalance)}</p>
               </div>
+              <p className="text-2xl font-bold text-slate-900 tabular-nums text-right">€{formatAmount(totalBalance)}</p>
             </div>
           </div>
 
