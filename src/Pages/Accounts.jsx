@@ -353,6 +353,23 @@ export default function Accounts() {
   }
 
   const displayAccounts = orderedAccounts.length > 0 ? orderedAccounts : accounts;
+  const totalBalance = displayAccounts.reduce((sum, acc) => sum + getAccountBalance(acc.id), 0);
+
+  const getUnclearedSum = (accountId) => {
+    const accountExpenses = expenses.filter((e) => e.account_id === accountId && e.cleared === false);
+    const accountIncome = income.filter((i) => i.account_id === accountId && i.cleared === false);
+    const accountTransfers = transfers.filter(
+      (t) => (t.from_account_id === accountId || t.to_account_id === accountId) && t.cleared === false
+    );
+    const expenseSum = accountExpenses.reduce((sum, e) => sum + e.amount, 0);
+    const incomeSum = accountIncome.reduce((sum, i) => sum + i.amount, 0);
+    const transferNet = accountTransfers.reduce((sum, t) => {
+      if (t.to_account_id === accountId) return sum + t.amount;
+      if (t.from_account_id === accountId) return sum - t.amount;
+      return sum;
+    }, 0);
+    return incomeSum - expenseSum + transferNet;
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
@@ -383,6 +400,15 @@ export default function Accounts() {
             </div>
           </div>
 
+          <div className="bg-white rounded-2xl p-4 border border-slate-100 mb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">Total Balance</p>
+                <p className="text-2xl font-bold text-slate-900 tabular-nums">€{formatAmount(totalBalance)}</p>
+              </div>
+            </div>
+          </div>
+
           {displayAccounts.length === 0 ? (
             <div className="bg-white rounded-2xl p-8 border border-slate-100 text-center">
               <h2 className="text-lg font-semibold text-slate-900 mb-2">No accounts yet</h2>
@@ -405,6 +431,7 @@ export default function Accounts() {
               onDelete={setPendingDeleteAccount}
               onSelect={setSelectedAccount}
               getAccountBalance={getAccountBalance}
+              getUnclearedSum={getUnclearedSum}
             />
           )}
         </motion.div>

@@ -20,6 +20,7 @@ export default function AccountTransactionsList({
   const [duplicatingType, setDuplicatingType] = useState(null);
   const [openActionsId, setOpenActionsId] = useState(null);
   const [visibleCount, setVisibleCount] = useState(200);
+  const [showUnclearedOnly, setShowUnclearedOnly] = useState(false);
 
   const getCreatedStamp = (t) => t?.created_at ?? t?.created_date ?? t?.date;
   const getUpdatedStamp = (t) => t?.updated_at ?? t?.updated_date ?? getCreatedStamp(t);
@@ -34,14 +35,17 @@ export default function AccountTransactionsList({
   }, [selectedAccount]);
 
   const sortedDisplayTransactions = useMemo(() => {
-    return [...displayTransactions].sort((a, b) => {
+    const filtered = showUnclearedOnly
+      ? displayTransactions.filter((t) => t.cleared === false)
+      : displayTransactions;
+    return [...filtered].sort((a, b) => {
       const dateCompare = new Date(b.date) - new Date(a.date);
       if (dateCompare !== 0) return dateCompare;
       const createdCompare = new Date(getCreatedStamp(b)) - new Date(getCreatedStamp(a));
       if (createdCompare !== 0) return createdCompare;
       return new Date(getUpdatedStamp(b)) - new Date(getUpdatedStamp(a));
     });
-  }, [displayTransactions]);
+  }, [displayTransactions, showUnclearedOnly]);
 
   const visibleTransactions = sortedDisplayTransactions.slice(0, visibleCount);
 
@@ -130,6 +134,17 @@ export default function AccountTransactionsList({
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-end">
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-slate-300"
+            checked={showUnclearedOnly}
+            onChange={(e) => setShowUnclearedOnly(e.target.checked)}
+          />
+          Show only uncleared
+        </label>
+      </div>
       {sortedMonths.map(monthKey => (
         <div key={monthKey} className="bg-white rounded-2xl p-4 border border-slate-100">
           <div className="sticky top-0 z-10 bg-white/90 backdrop-blur py-1">

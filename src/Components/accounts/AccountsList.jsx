@@ -5,7 +5,7 @@ import { GripVertical, ChevronRight, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatAmount } from '@/utils';
 
-export default function AccountsList({ accounts, editMode, onReorder, onEdit, onDelete, onSelect, getAccountBalance }) {
+export default function AccountsList({ accounts, editMode, onReorder, onEdit, onDelete, onSelect, getAccountBalance, getUnclearedSum }) {
   const handleDragEnd = (result) => {
     if (!result.destination) return;
     if (result.destination.index === result.source.index) return;
@@ -84,6 +84,7 @@ export default function AccountsList({ accounts, editMode, onReorder, onEdit, on
     <div className="space-y-3">
       {accounts.map((account, index) => {
         const balance = getAccountBalance(account.id);
+        const uncleared = getUnclearedSum ? getUnclearedSum(account.id) : 0;
         
         return (
           <motion.div
@@ -113,6 +114,11 @@ export default function AccountsList({ accounts, editMode, onReorder, onEdit, on
                   <p className="text-lg font-bold text-slate-900 tabular-nums">
                     €{formatAmount(balance)}
                   </p>
+                  {uncleared !== 0 && (
+                    <p className="text-xs text-slate-400 tabular-nums">
+                      Uncleared: €{formatAmount(uncleared)}
+                    </p>
+                  )}
                 </div>
                 <ChevronRight className="w-5 h-5 text-slate-400" />
               </div>
