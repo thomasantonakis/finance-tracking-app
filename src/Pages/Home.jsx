@@ -66,6 +66,11 @@ export default function Home() {
     queryFn: () => base44.entities.Transfer.list('-date'),
   });
 
+  const { data: goals = [] } = useQuery({
+    queryKey: ['goals'],
+    queryFn: () => base44.entities.Goal.list('-created_at'),
+  });
+
   useEffect(() => {
     ensureStartingBalanceTransactions(accounts, queryClient);
   }, [accounts, queryClient]);
@@ -255,6 +260,33 @@ export default function Home() {
     (t.category || '').toLowerCase() === 'starting balance' ||
     (t.category || '').toLowerCase() === 'system - starting balance';
 
+  const goalsThisMonth = useMemo(() => {
+    const monthKey = format(new Date(), 'yyyy-MM');
+    const monthStart = startOfMonth(new Date());
+    const monthEnd = endOfMonth(new Date());
+    return goals
+      .filter((g) => g.start_month <= monthKey && g.end_month >= monthKey)
+      .map((g) => {
+        const goalCategory = (g.category || '').trim().toLowerCase();
+        const spent = expenses
+          .filter((e) => {
+            const date = new Date(e.date);
+            return (
+              date >= monthStart &&
+              date <= monthEnd &&
+              (e.category || '').trim().toLowerCase() === goalCategory
+            );
+          })
+          .reduce((sum, e) => sum + e.amount, 0);
+        const progress = g.amount > 0 ? Math.min(100, (spent / g.amount) * 100) : 0;
+        return {
+          ...g,
+          spent,
+          progress,
+        };
+      });
+  }, [goals, expenses]);
+
   const allTransactions = [
     ...expenses.map(e => ({ ...e, type: 'expense' })),
     ...income.map(i => ({ ...i, type: 'income' })),
@@ -355,6 +387,43 @@ export default function Home() {
           />
 
           <FloatingAddButton onSuccess={handleSuccess} />
+
+          {goalsThisMonth.length > 0 && (
+            <div className="bg-white rounded-2xl p-6 border border-slate-100">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-slate-900">Monthly Goals</h2>
+                <p className="text-sm text-slate-500">{format(new Date(), 'MMMM yyyy')}</p>
+              </div>
+              <div className="space-y-4">
+                {goalsThisMonth.map((goal) => {
+                  const remaining = goal.amount - goal.spent;
+                  const progressClass =
+                    goal.progress >= 100 ? 'bg-red-500' : goal.progress >= 80 ? 'bg-amber-500' : 'bg-emerald-500';
+                  return (
+                    <div key={goal.id} className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-medium text-slate-900">{goal.category}</span>
+                        <span className="text-slate-600 tabular-nums">
+                          €{formatAmount(goal.spent)} / €{formatAmount(goal.amount)}
+                        </span>
+                      </div>
+                      <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                        <div
+                          className={`h-full ${progressClass}`}
+                          style={{ width: `${goal.progress}%` }}
+                        />
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        {remaining >= 0
+                          ? `€${formatAmount(remaining)} remaining`
+                          : `€${formatAmount(Math.abs(remaining))} over goal`}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <RecentTransactions 
             transactions={allTransactions}

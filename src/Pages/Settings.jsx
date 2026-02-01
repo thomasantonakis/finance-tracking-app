@@ -142,6 +142,11 @@ export default function Settings() {
     queryFn: () => base44.entities.RecurringRule.list('-created_at'),
   });
 
+  const { data: goals = [] } = useQuery({
+    queryKey: ['goals'],
+    queryFn: () => base44.entities.Goal.list('-created_at'),
+  });
+
   const { data: existingExpenseCategories = [] } = useQuery({
     queryKey: ['ExpenseCategory'],
     queryFn: () => base44.entities.ExpenseCategory.list(),
@@ -199,6 +204,56 @@ export default function Settings() {
     });
     return result;
   }, [allTransactions]);
+
+  const [goalCategories, setGoalCategories] = useState([]);
+  const [goalAmount, setGoalAmount] = useState('');
+  const [goalStartMonth, setGoalStartMonth] = useState('');
+  const [goalEndMonth, setGoalEndMonth] = useState('');
+  const [showGoals, setShowGoals] = useState(false);
+
+  const toggleGoalCategory = (name) => {
+    setGoalCategories((prev) =>
+      prev.includes(name) ? prev.filter((c) => c !== name) : [...prev, name]
+    );
+  };
+
+  const handleCreateGoals = async () => {
+    if (goalCategories.length === 0) {
+      toast.error('Select at least one category for the goal.');
+      return;
+    }
+    if (!goalAmount || Number(goalAmount) <= 0) {
+      toast.error('Enter a valid monthly goal amount.');
+      return;
+    }
+    if (!goalStartMonth || !goalEndMonth) {
+      toast.error('Select a start and end month.');
+      return;
+    }
+    if (goalStartMonth > goalEndMonth) {
+      toast.error('Start month must be before end month.');
+      return;
+    }
+    for (const category of goalCategories) {
+      await base44.entities.Goal.create({
+        category,
+        amount: Number(goalAmount),
+        start_month: goalStartMonth,
+        end_month: goalEndMonth,
+      });
+    }
+    toast.success('Goals created.');
+    setGoalCategories([]);
+    setGoalAmount('');
+    setGoalStartMonth('');
+    setGoalEndMonth('');
+    queryClient.invalidateQueries({ queryKey: ['goals'] });
+  };
+
+  const handleDeleteGoal = async (goalId) => {
+    await base44.entities.Goal.delete(goalId);
+    queryClient.invalidateQueries({ queryKey: ['goals'] });
+  };
 
   const reservedCategoryNames = useMemo(
     () => new Set(['starting balance', 'system - starting balance']),
@@ -1873,6 +1928,125 @@ export default function Settings() {
                     </Select>
                   </div>
                 </div>
+                <button
+                  onClick={() => setShowGoals((prev) => !prev)}
+                  className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="p-2 rounded-lg bg-emerald-50">
+                    <span className="text-emerald-600 font-semibold">G</span>
+                  </div>
+                  <div className="flex-1 text-left">
+                    <p className="font-medium text-slate-900">Monthly Goals</p>
+                    <p className="text-sm text-slate-500">Set goals for one or more expense categories</p>
+                  </div>
+                  {showGoals ? (
+                    <ChevronDown className="w-4 h-4 text-slate-500" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-slate-500" />
+                  )}
+                </button>
+
+                {showGoals && (
+                  <div className="w-full flex flex-col gap-4 p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs text-slate-500">Goal Amount (per month)</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="e.g. 500"
+                          value={goalAmount}
+                          onChange={(e) => setGoalAmount(e.target.value)}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs text-slate-500">Start Month</Label>
+                          <Input
+                            type="month"
+                            value={goalStartMonth}
+                            onChange={(e) => setGoalStartMonth(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-slate-500">End Month</Label>
+                          <Input
+                            type="month"
+                            value={goalEndMonth}
+                            onChange={(e) => setGoalEndMonth(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-slate-500">Categories (select one or more)</Label>
+                      <div className="mt-2 max-h-40 overflow-auto rounded-lg border border-slate-200 p-2 space-y-1">
+                        {Array.from(
+                          existingExpenseCategories
+                            .filter((c) => (c.name || '').toLowerCase() !== 'system - starting balance')
+                            .reduce((acc, c) => {
+                              const name = (c.name || '').trim();
+                              if (!name) return acc;
+                              const key = name.toLowerCase();
+                              if (!acc.has(key)) acc.set(key, name);
+                              return acc;
+                            }, new Map())
+                            .values()
+                        ).map((name) => (
+                          <label key={name} className="flex items-center gap-2 text-sm text-slate-700">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-slate-300"
+                              checked={goalCategories.includes(name)}
+                              onChange={() => toggleGoalCategory(name)}
+                            />
+                            {name}
+                          </label>
+                        ))}
+                        {existingExpenseCategories.length === 0 && (
+                          <p className="text-sm text-slate-400">No expense categories available.</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        className="bg-slate-900"
+                        onClick={handleCreateGoals}
+                      >
+                        Add Goal
+                      </Button>
+                    </div>
+                    {goals.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-semibold text-slate-900">Existing Goals</h4>
+                        <div className="space-y-2">
+                          {goals.map((goal) => (
+                            <div
+                              key={goal.id}
+                              className="flex items-center justify-between rounded-lg border border-slate-100 p-2"
+                            >
+                              <div>
+                                <p className="text-sm text-slate-900">{goal.category}</p>
+                                <p className="text-xs text-slate-500">
+                                  €{formatAmount(goal.amount)} · {goal.start_month} → {goal.end_month}
+                                </p>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-red-600"
+                                onClick={() => handleDeleteGoal(goal.id)}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <button
                   onClick={() => setShowCustomize(!showCustomize)}
                   className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors"

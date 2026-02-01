@@ -1,0 +1,25 @@
+{
+  "name": "Goal",
+  "fields": [
+    {
+      "name": "category",
+      "type": "text",
+      "required": true
+    },
+    {
+      "name": "amount",
+      "type": "number",
+      "required": true
+    },
+    {
+      "name": "start_month",
+      "type": "text",
+      "required": true
+    },
+    {
+      "name": "end_month",
+      "type": "text",
+      "required": true
+    }
+  ]
+}
