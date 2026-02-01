@@ -81,12 +81,12 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[80vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle>Edit Transfer</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 max-h-[calc(80vh-72px)] overflow-y-auto pr-1 pb-12">
           <div className="space-y-2">
             <Label htmlFor="from">From Account *</Label>
             <Select
@@ -102,11 +102,11 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
               className="w-full"
             >
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue placeholder="Select account" />
               </SelectTrigger>
               <SelectContent>
                 {fromOptions.map((account) => (
-                  <SelectItem key={account.id} value={account.id}>
+                  <SelectItem key={account.id} value={account.id} label={account.name}>
                     <div className="flex items-center gap-2">
                       <div
                         className="w-3 h-3 rounded-full"
@@ -141,11 +141,11 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
               className="w-full"
             >
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue placeholder="Select account" />
               </SelectTrigger>
               <SelectContent>
                 {toOptions.map((account) => (
-                  <SelectItem key={account.id} value={account.id}>
+                  <SelectItem key={account.id} value={account.id} label={account.name}>
                     <div className="flex items-center gap-2">
                       <div
                         className="w-3 h-3 rounded-full"
