@@ -49,31 +49,33 @@ export default function DuplicateTransactionModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[80vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle>
             Duplicate {type === "income" ? "Income" : type === "transfer" ? "Transfer" : "Expense"}
           </DialogTitle>
         </DialogHeader>
-        {type === "transfer" ? (
-          <TransferForm
-            onSuccess={handleSuccess}
-            onCancel={() => onOpenChange(false)}
-            initialData={initialData}
-            initialDate={defaultDate}
-            onAfterCreate={handleCreated}
-          />
-        ) : (
-          <TransactionForm
-            type={type}
-            onSuccess={handleSuccess}
-            onCancel={() => onOpenChange(false)}
-            initialData={initialData}
-            initialDate={defaultDate}
-            onAfterCreate={handleCreated}
-            filterSubcategoryByCategory={false}
-          />
-        )}
+        <div className="max-h-[calc(80vh-72px)] overflow-y-auto pr-1 pb-12">
+          {type === "transfer" ? (
+            <TransferForm
+              onSuccess={handleSuccess}
+              onCancel={() => onOpenChange(false)}
+              initialData={initialData}
+              initialDate={defaultDate}
+              onAfterCreate={handleCreated}
+            />
+          ) : (
+            <TransactionForm
+              type={type}
+              onSuccess={handleSuccess}
+              onCancel={() => onOpenChange(false)}
+              initialData={initialData}
+              initialDate={defaultDate}
+              onAfterCreate={handleCreated}
+              filterSubcategoryByCategory={false}
+            />
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );
