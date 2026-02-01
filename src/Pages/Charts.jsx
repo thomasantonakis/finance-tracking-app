@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { motion } from 'framer-motion';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfYear, endOfYear, eachMonthOfInterval, endOfDay, addYears } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfYear, endOfYear, eachMonthOfInterval, endOfDay, addYears, subMonths } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -23,6 +23,7 @@ export default function Charts() {
   const [pieModal, setPieModal] = useState({ open: false, type: 'expense' });
   const [expandedCategory, setExpandedCategory] = useState(null);
   const [expandedSubcategories, setExpandedSubcategories] = useState([]);
+  const chartCacheRef = useRef(new Map());
   const queryClient = useQueryClient();
 
   const { data: expenses = [] } = useQuery({
@@ -88,150 +89,237 @@ export default function Charts() {
   const filteredIncome = filterTransactions(income);
   const filteredTransfers = filterTransactions(transfers);
 
-  const lineChartData = useMemo(() => {
-    let periods = [];
-    
-    if (viewMode === 'days') {
-      const start = startOfMonth(currentDate);
-      const end = endOfMonth(currentDate);
-      periods = eachDayOfInterval({ start, end }).map(date => ({
+  const buildPeriods = (mode, targetDate) => {
+    if (mode === 'days') {
+      const start = startOfMonth(targetDate);
+      const end = endOfMonth(targetDate);
+      return eachDayOfInterval({ start, end }).map(date => ({
         date,
         label: format(date, 'd'),
         fullLabel: format(date, 'MMM d')
       }));
-    } else if (viewMode === 'months') {
-      const start = startOfYear(currentDate);
-      const end = endOfYear(currentDate);
-      periods = eachMonthOfInterval({ start, end }).map(date => ({
-        date,
-        label: format(date, 'MMM'),
-        fullLabel: format(date, 'MMMM yyyy')
-      }));
+    }
+    const start = startOfYear(targetDate);
+    const end = endOfYear(targetDate);
+    return eachMonthOfInterval({ start, end }).map(date => ({
+      date,
+      label: format(date, 'MMM'),
+      fullLabel: format(date, 'MMMM yyyy')
+    }));
+  };
+
+  const aggregateKey = (mode, date) => (mode === 'days' ? format(date, 'yyyy-MM-dd') : format(date, 'yyyy-MM'));
+
+  const aggregates = useMemo(() => {
+    const daily = new Map();
+    const monthly = new Map();
+
+    const addToMap = (map, key, data) => {
+      const current = map.get(key) || {
+        income: 0,
+        expenses: 0,
+        incomeImportant: 0,
+        incomeOther: 0,
+        expensesImportant: 0,
+        expensesOther: 0,
+        transferNet: 0,
+      };
+      map.set(key, {
+        income: current.income + data.income,
+        expenses: current.expenses + data.expenses,
+        incomeImportant: current.incomeImportant + data.incomeImportant,
+        incomeOther: current.incomeOther + data.incomeOther,
+        expensesImportant: current.expensesImportant + data.expensesImportant,
+        expensesOther: current.expensesOther + data.expensesOther,
+        transferNet: current.transferNet + data.transferNet,
+      });
+    };
+
+    filteredIncome.forEach((i) => {
+      const date = new Date(i.date);
+      const keyDay = format(date, 'yyyy-MM-dd');
+      const keyMonth = format(date, 'yyyy-MM');
+      const important = i.important === true;
+      addToMap(daily, keyDay, {
+        income: i.amount,
+        expenses: 0,
+        incomeImportant: important ? i.amount : 0,
+        incomeOther: important ? 0 : i.amount,
+        expensesImportant: 0,
+        expensesOther: 0,
+        transferNet: 0,
+      });
+      addToMap(monthly, keyMonth, {
+        income: i.amount,
+        expenses: 0,
+        incomeImportant: important ? i.amount : 0,
+        incomeOther: important ? 0 : i.amount,
+        expensesImportant: 0,
+        expensesOther: 0,
+        transferNet: 0,
+      });
+    });
+
+    filteredExpenses.forEach((e) => {
+      const date = new Date(e.date);
+      const keyDay = format(date, 'yyyy-MM-dd');
+      const keyMonth = format(date, 'yyyy-MM');
+      const important = e.important === true;
+      addToMap(daily, keyDay, {
+        income: 0,
+        expenses: e.amount,
+        incomeImportant: 0,
+        incomeOther: 0,
+        expensesImportant: important ? e.amount : 0,
+        expensesOther: important ? 0 : e.amount,
+        transferNet: 0,
+      });
+      addToMap(monthly, keyMonth, {
+        income: 0,
+        expenses: e.amount,
+        incomeImportant: 0,
+        incomeOther: 0,
+        expensesImportant: important ? e.amount : 0,
+        expensesOther: important ? 0 : e.amount,
+        transferNet: 0,
+      });
+    });
+
+    if (selectedAccount !== 'all') {
+      filteredTransfers.forEach((t) => {
+        const date = new Date(t.date);
+        const keyDay = format(date, 'yyyy-MM-dd');
+        const keyMonth = format(date, 'yyyy-MM');
+        let net = 0;
+        if (t.to_account_id === selectedAccount) net = t.amount;
+        if (t.from_account_id === selectedAccount) net = -t.amount;
+        if (net !== 0) {
+          addToMap(daily, keyDay, {
+            income: 0,
+            expenses: 0,
+            incomeImportant: 0,
+            incomeOther: 0,
+            expensesImportant: 0,
+            expensesOther: 0,
+            transferNet: net,
+          });
+          addToMap(monthly, keyMonth, {
+            income: 0,
+            expenses: 0,
+            incomeImportant: 0,
+            incomeOther: 0,
+            expensesImportant: 0,
+            expensesOther: 0,
+            transferNet: net,
+          });
+        }
+      });
     }
 
-    const cumulativeBalance = 0;
+    const buildCumulativeMap = (map, mode) => {
+      const entries = Array.from(map.entries()).sort((a, b) => {
+        const aDate = new Date(mode === 'days' ? a[0] : `${a[0]}-01`);
+        const bDate = new Date(mode === 'days' ? b[0] : `${b[0]}-01`);
+        return aDate - bDate;
+      });
+      const cumulative = new Map();
+      let cumIncome = 0;
+      let cumExpenses = 0;
+      let cumTransfer = 0;
+      entries.forEach(([key, data]) => {
+        cumIncome += data.income;
+        cumExpenses += data.expenses;
+        cumTransfer += data.transferNet;
+        cumulative.set(key, cumIncome - cumExpenses + cumTransfer);
+      });
+      return cumulative;
+    };
 
-    return periods.map((period, index) => {
-      const periodEnd = viewMode === 'months' ? endOfMonth(period.date) : endOfDay(period.date);
-      const periodEndLastYear = addYears(periodEnd, -1);
+    const cumulativeDaily = buildCumulativeMap(daily, 'days');
+    const cumulativeMonthly = buildCumulativeMap(monthly, 'months');
 
-      // Get all transactions up to and including this period
-      const upToDateExpenses = filteredExpenses.filter(e => {
-        const expenseDate = new Date(e.date);
-        return expenseDate <= periodEnd;
-      }).reduce((sum, e) => sum + e.amount, 0);
+    return { daily, monthly, cumulativeDaily, cumulativeMonthly };
+  }, [filteredIncome, filteredExpenses, filteredTransfers, selectedAccount]);
 
-      const upToDateIncome = filteredIncome.filter(i => {
-        const incomeDate = new Date(i.date);
-        return incomeDate <= periodEnd;
-      }).reduce((sum, i) => sum + i.amount, 0);
+  const buildLineChartData = (mode, targetDate) => {
+    const periods = buildPeriods(mode, targetDate);
+    const map = mode === 'days' ? aggregates.daily : aggregates.monthly;
+    const cumulativeOverall = mode === 'days' ? aggregates.cumulativeDaily : aggregates.cumulativeMonthly;
 
-      const upToDateTransferNet = selectedAccount === 'all'
-        ? 0
-        : filteredTransfers.filter(t => {
-            const transferDate = new Date(t.date);
-            return transferDate <= periodEnd;
-          }).reduce((sum, t) => {
-            if (t.to_account_id === selectedAccount) return sum + t.amount;
-            if (t.from_account_id === selectedAccount) return sum - t.amount;
-            return sum;
-          }, 0);
-
-      // For period-specific data (for income/expense charts)
-      const periodExpenses = filteredExpenses.filter(e => {
-        const expenseDate = new Date(e.date);
-        if (viewMode === 'days') {
-          return format(expenseDate, 'yyyy-MM-dd') === format(period.date, 'yyyy-MM-dd');
-        } else {
-          return format(expenseDate, 'yyyy-MM') === format(period.date, 'yyyy-MM');
-        }
-      }).reduce((sum, e) => sum + e.amount, 0);
-
-      const periodIncome = filteredIncome.filter(i => {
-        const incomeDate = new Date(i.date);
-        if (viewMode === 'days') {
-          return format(incomeDate, 'yyyy-MM-dd') === format(period.date, 'yyyy-MM-dd');
-        } else {
-          return format(incomeDate, 'yyyy-MM') === format(period.date, 'yyyy-MM');
-        }
-      }).reduce((sum, i) => sum + i.amount, 0);
-
-      const periodIncomeImportant = filteredIncome.filter(i => {
-        const incomeDate = new Date(i.date);
-        const samePeriod =
-          viewMode === 'days'
-            ? format(incomeDate, 'yyyy-MM-dd') === format(period.date, 'yyyy-MM-dd')
-            : format(incomeDate, 'yyyy-MM') === format(period.date, 'yyyy-MM');
-        return samePeriod && i.important === true;
-      }).reduce((sum, i) => sum + i.amount, 0);
-
-      const periodIncomeOther = filteredIncome.filter(i => {
-        const incomeDate = new Date(i.date);
-        const samePeriod =
-          viewMode === 'days'
-            ? format(incomeDate, 'yyyy-MM-dd') === format(period.date, 'yyyy-MM-dd')
-            : format(incomeDate, 'yyyy-MM') === format(period.date, 'yyyy-MM');
-        return samePeriod && i.important !== true;
-      }).reduce((sum, i) => sum + i.amount, 0);
-
-      const periodExpensesImportant = filteredExpenses.filter(e => {
-        const expenseDate = new Date(e.date);
-        const samePeriod =
-          viewMode === 'days'
-            ? format(expenseDate, 'yyyy-MM-dd') === format(period.date, 'yyyy-MM-dd')
-            : format(expenseDate, 'yyyy-MM') === format(period.date, 'yyyy-MM');
-        return samePeriod && e.important === true;
-      }).reduce((sum, e) => sum + e.amount, 0);
-
-      const periodExpensesOther = filteredExpenses.filter(e => {
-        const expenseDate = new Date(e.date);
-        const samePeriod =
-          viewMode === 'days'
-            ? format(expenseDate, 'yyyy-MM-dd') === format(period.date, 'yyyy-MM-dd')
-            : format(expenseDate, 'yyyy-MM') === format(period.date, 'yyyy-MM');
-        return samePeriod && e.important !== true;
-      }).reduce((sum, e) => sum + e.amount, 0);
-
-      // Calculate cumulative net worth (balance over time)
-      const networth = cumulativeBalance + upToDateIncome - upToDateExpenses + upToDateTransferNet;
-
-      const upToDateExpensesLastYear = filteredExpenses.filter(e => {
-        const expenseDate = new Date(e.date);
-        return expenseDate <= periodEndLastYear;
-      }).reduce((sum, e) => sum + e.amount, 0);
-
-      const upToDateIncomeLastYear = filteredIncome.filter(i => {
-        const incomeDate = new Date(i.date);
-        return incomeDate <= periodEndLastYear;
-      }).reduce((sum, i) => sum + i.amount, 0);
-
-      const upToDateTransferNetLastYear = selectedAccount === 'all'
-        ? 0
-        : filteredTransfers.filter(t => {
-            const transferDate = new Date(t.date);
-            return transferDate <= periodEndLastYear;
-          }).reduce((sum, t) => {
-            if (t.to_account_id === selectedAccount) return sum + t.amount;
-            if (t.from_account_id === selectedAccount) return sum - t.amount;
-            return sum;
-          }, 0);
-
-      const networthLastYear = cumulativeBalance + upToDateIncomeLastYear - upToDateExpensesLastYear + upToDateTransferNetLastYear;
-
+    let lastNetworth = 0;
+    let lastNetworthLastYear = 0;
+    return periods.map((period) => {
+      const key = aggregateKey(mode, period.date);
+      const data = map.get(key) || {
+        income: 0,
+        expenses: 0,
+        incomeImportant: 0,
+        incomeOther: 0,
+        expensesImportant: 0,
+        expensesOther: 0,
+        transferNet: 0,
+      };
+      const networthFromMap = cumulativeOverall.get(key);
+      const networth = networthFromMap !== undefined ? networthFromMap : lastNetworth;
+      lastNetworth = networth;
+      const lastKey = aggregateKey(mode, addYears(period.date, -1));
+      const networthLastYearFromMap = cumulativeOverall.get(lastKey);
+      const networthLastYear =
+        networthLastYearFromMap !== undefined ? networthLastYearFromMap : lastNetworthLastYear;
+      lastNetworthLastYear = networthLastYear;
       return {
         name: period.label,
         fullName: period.fullLabel,
-        income: periodIncome,
-        expenses: periodExpenses,
-        incomeImportant: periodIncomeImportant,
-        incomeOther: periodIncomeOther,
-        expensesImportant: periodExpensesImportant,
-        expensesOther: periodExpensesOther,
-        networth: networth,
-        networthLastYear: networthLastYear
+        income: data.income,
+        expenses: data.expenses,
+        incomeImportant: data.incomeImportant,
+        incomeOther: data.incomeOther,
+        expensesImportant: data.expensesImportant,
+        expensesOther: data.expensesOther,
+        networth,
+        networthLastYear,
       };
     });
-  }, [viewMode, currentDate, filteredExpenses, filteredIncome, filteredTransfers, accounts, selectedAccount]);
+  };
+
+  const cacheKey = (mode, date) => {
+    const period = mode === 'days' ? format(date, 'yyyy-MM') : format(date, 'yyyy');
+    return `${mode}:${period}:${selectedAccount}:${showCleared ? '1' : '0'}:${showProjected ? '1' : '0'}`;
+  };
+
+  useEffect(() => {
+    chartCacheRef.current.clear();
+  }, [expenses, income, transfers, selectedAccount, showCleared, showProjected]);
+
+  useEffect(() => {
+    if (!filteredExpenses || !filteredIncome || !filteredTransfers) return;
+    const monthsToCache = 3;
+    for (let i = 0; i <= monthsToCache; i += 1) {
+      const target = subMonths(currentDate, i);
+      const key = cacheKey('days', target);
+      if (!chartCacheRef.current.has(key)) {
+        chartCacheRef.current.set(key, buildLineChartData('days', target));
+      }
+    }
+    const currentYearKey = cacheKey('months', currentDate);
+    if (!chartCacheRef.current.has(currentYearKey)) {
+      chartCacheRef.current.set(currentYearKey, buildLineChartData('months', currentDate));
+    }
+    const prevYear = addYears(currentDate, -1);
+    const prevYearKey = cacheKey('months', prevYear);
+    if (!chartCacheRef.current.has(prevYearKey)) {
+      chartCacheRef.current.set(prevYearKey, buildLineChartData('months', prevYear));
+    }
+  }, [currentDate, filteredExpenses, filteredIncome, filteredTransfers, selectedAccount, showCleared, showProjected]);
+
+  const lineChartData = useMemo(() => {
+    const key = cacheKey(viewMode, currentDate);
+    const cached = chartCacheRef.current.get(key);
+    if (cached) return cached;
+    const computed = buildLineChartData(viewMode, currentDate);
+    chartCacheRef.current.set(key, computed);
+    return computed;
+  }, [viewMode, currentDate, filteredExpenses, filteredIncome, filteredTransfers, selectedAccount, showCleared, showProjected]);
 
   const { periodStart, periodEnd } = useMemo(() => {
     if (viewMode === 'months') {
