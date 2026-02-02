@@ -115,6 +115,12 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
     color: colorOptions[0]
   });
 
+  const capitalizeFirst = (value) => {
+    const trimmed = (value || '').trim();
+    if (!trimmed) return '';
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -124,24 +130,36 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
     }
 
     setLoading(true);
+    const normalizedName = capitalizeFirst(formData.name);
+    const normalizedBalance = parseFloat(formData.starting_balance);
     
     if (account) {
-      await base44.entities.Account.update(account.id, {
-        name: formData.name,
-        starting_balance: parseFloat(formData.starting_balance),
-        category: formData.category,
-        color: formData.color
-      });
-      await ensureStartingBalanceTransaction(account.id, formData.starting_balance);
-      toast.success('Account updated successfully');
+      const hasChanges =
+        account.name !== normalizedName ||
+        Number(account.starting_balance) !== Number(normalizedBalance) ||
+        account.category !== formData.category ||
+        account.color !== formData.color;
+
+      if (hasChanges) {
+        await base44.entities.Account.update(account.id, {
+          name: normalizedName,
+          starting_balance: normalizedBalance,
+          category: formData.category,
+          color: formData.color
+        });
+        await ensureStartingBalanceTransaction(account.id, normalizedBalance);
+        toast.success('Account updated successfully');
+      } else {
+        toast.info('No changes to update.');
+      }
     } else {
       const created = await base44.entities.Account.create({
-        name: formData.name,
-        starting_balance: parseFloat(formData.starting_balance),
+        name: normalizedName,
+        starting_balance: normalizedBalance,
         category: formData.category,
         color: formData.color
       });
-      await ensureStartingBalanceTransaction(created.id, formData.starting_balance);
+      await ensureStartingBalanceTransaction(created.id, normalizedBalance);
       toast.success('Account created successfully');
     }
     

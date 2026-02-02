@@ -68,11 +68,13 @@ export default function CalendarGrid({
           const hasData = dayExpenses > 0 || dayIncome > 0 || dayTransfers > 0;
           const weekend = isWeekend(day);
 
-          const handleTouchEnd = () => {
+          const handleTouchEnd = (event) => {
+            if (event) event.preventDefault();
+            onSelectDate(day);
             if (!onDoubleClick) return;
             const now = Date.now();
             const key = day.toDateString();
-            if (lastTapRef.current.key === key && now - lastTapRef.current.time < 300) {
+            if (lastTapRef.current.key === key && now - lastTapRef.current.time < 350) {
               lastTapRef.current = { time: 0, key: null };
               onDoubleClick(day);
               return;
@@ -89,36 +91,38 @@ export default function CalendarGrid({
               onClick={() => onSelectDate(day)}
               onDoubleClick={() => onDoubleClick && onDoubleClick(day)}
               onTouchEnd={handleTouchEnd}
-              className={`relative h-20 rounded-md p-1 transition-all border ${
+              className={`touch-manipulation relative h-20 rounded-md p-1 transition-all border ${
                 isTodayDay
-                  ? 'bg-blue-500 border-blue-600'
+                  ? 'bg-white border-blue-500 ring-1 ring-blue-300'
                   : isSelected
                   ? 'bg-slate-200 border-slate-400'
+                  : !isCurrentMonth
+                  ? 'border-slate-200 bg-slate-100 text-slate-400'
                   : weekend
                   ? 'border-slate-200 bg-slate-50 hover:bg-slate-100'
                   : 'border-slate-200 hover:bg-slate-50'
-              } ${!isCurrentMonth && !collapsed ? 'opacity-30' : ''}`}
+              }`}
             >
               <div className="flex flex-col items-center justify-start h-full">
                 <span className={`text-sm font-bold leading-tight ${
-                  isTodayDay ? 'text-white' : 'text-slate-900'
+                  isTodayDay ? 'text-slate-900' : !isCurrentMonth ? 'text-slate-400' : 'text-slate-900'
                 }`}>
                   {format(day, 'd')}
                 </span>
                 {hasData && (
                   <div className="text-[10px] leading-tight space-y-0 w-full">
                     {dayIncome > 0 && (
-                      <div className={`font-semibold ${isTodayDay ? 'text-white' : 'text-green-600'}`}>
+                      <div className={`font-semibold ${!isCurrentMonth ? 'text-green-300' : 'text-green-600'}`}>
                         {Math.round(dayIncome)}
                       </div>
                     )}
                     {dayExpenses > 0 && (
-                      <div className={`font-semibold ${isTodayDay ? 'text-white' : 'text-red-600'}`}>
+                      <div className={`font-semibold ${!isCurrentMonth ? 'text-red-300' : 'text-red-600'}`}>
                         {Math.round(dayExpenses)}
                       </div>
                     )}
                     {dayTransfers > 0 && (
-                      <div className={`font-medium ${isTodayDay ? 'text-white opacity-70' : 'text-slate-400'}`}>
+                      <div className={`font-medium ${!isCurrentMonth ? 'text-slate-300' : 'text-slate-400'}`}>
                         {Math.round(dayTransfers)}
                       </div>
                     )}

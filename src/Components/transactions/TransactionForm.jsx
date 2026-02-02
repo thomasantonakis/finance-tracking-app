@@ -154,6 +154,12 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
     return result;
   }, [transactions]);
 
+  const normalizeCategoryName = (value) => {
+    const trimmed = (value || '').trim();
+    if (!trimmed) return '';
+    return trimmed;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -172,10 +178,11 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
     setLoading(true);
     
     const entity = type === 'income' ? 'Income' : 'Expense';
-    const finalCategory = rawCategory.toLowerCase();
-    const categoryExists = deduplicatedCategories.some(
-      (cat) => (cat.name || cat).toLowerCase() === finalCategory
+    const finalCategory = normalizeCategoryName(rawCategory);
+    const matchedCategory = deduplicatedCategories.find(
+      (cat) => (cat.name || cat).toLowerCase() === finalCategory.toLowerCase()
     );
+    const categoryExists = !!matchedCategory;
     if (!categoryExists) {
       const existingCategories = customCategories.length > 0 ? customCategories : [];
       await base44.entities[entityName].create({
@@ -183,6 +190,16 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
         color: '#64748b',
         order: existingCategories.length
       });
+    } else if (matchedCategory?.id && matchedCategory.name !== finalCategory) {
+      await base44.entities[entityName].update(matchedCategory.id, {
+        name: finalCategory
+      });
+      const categoryTransactions = transactions.filter(
+        (t) => (t.category || '') === matchedCategory.name
+      );
+      for (const t of categoryTransactions) {
+        await base44.entities[entity].update(t.id, { category: finalCategory });
+      }
     }
 
     await base44.entities[entity].create({

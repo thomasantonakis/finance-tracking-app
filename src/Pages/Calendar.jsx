@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
-import { format, addMonths, subMonths, startOfWeek, addWeeks, subWeeks, getWeek } from 'date-fns';
+import { format, addMonths, subMonths, startOfWeek, addWeeks, subWeeks, getWeek, isSameMonth } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import CalendarGrid from '../Components/calendar/CalendarGrid';
@@ -114,6 +114,9 @@ export default function Calendar() {
 
   const handleSelectDate = (date) => {
     setSelectedDate(date);
+    if (!weekView && !collapsed && !isSameMonth(date, currentDate)) {
+      setCurrentDate(date);
+    }
   };
 
   const handleDoubleClick = (date) => {

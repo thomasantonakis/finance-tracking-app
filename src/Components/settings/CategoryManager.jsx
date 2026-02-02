@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatAmount } from '@/utils';
 import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,6 +33,7 @@ export default function CategoryManager({ type }) {
   const [mergeDialog, setMergeDialog] = useState({ open: false, existingCategory: null, editingId: null });
   const [deleteDialog, setDeleteDialog] = useState({ open: false, category: null, target: '', query: '', showList: false });
   const [removeUnusedDialog, setRemoveUnusedDialog] = useState({ open: false, categories: [] });
+  const [progressDialog, setProgressDialog] = useState({ open: false, title: '', total: 0, done: 0 });
   const queryClient = useQueryClient();
   const deleteDropdownRef = useRef(null);
   const createInputRef = useRef(null);
@@ -113,17 +115,24 @@ export default function CategoryManager({ type }) {
     },
   });
 
+  const capitalizeFirst = (value) => {
+    const trimmed = (value || '').trim();
+    if (!trimmed) return '';
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+  };
+
   const handleCreate = () => {
     if (!formData.name) {
       toast.error('Please enter a category name');
       return;
     }
-    if (RESERVED_CATEGORY_NAMES.has(formData.name.toLowerCase())) {
+    const normalizedName = capitalizeFirst(formData.name);
+    if (RESERVED_CATEGORY_NAMES.has(normalizedName.toLowerCase())) {
       toast.error('This category name is reserved.');
       return;
     }
     createMutation.mutate({
-      name: formData.name.toLowerCase(),
+      name: normalizedName,
       color: formData.color,
       order: categories.length
     });
@@ -135,13 +144,15 @@ export default function CategoryManager({ type }) {
       return;
     }
     
-    const newName = formData.name.toLowerCase();
+    const newName = capitalizeFirst(formData.name);
     if (RESERVED_CATEGORY_NAMES.has(newName)) {
       toast.error('This category name is reserved.');
       return;
     }
     const currentCategory = categories.find(c => c.id === id);
-    const existingCategory = categories.find(c => c.name.toLowerCase() === newName && c.id !== id);
+    const existingCategory = categories.find(
+      c => c.name.toLowerCase() === newName.toLowerCase() && c.id !== id
+    );
     
     // If renaming to an existing category name, prompt for merge
     if (existingCategory) {
@@ -149,15 +160,40 @@ export default function CategoryManager({ type }) {
       return;
     }
     
-    // Update the category
-    await base44.entities[entityName].update(id, { name: newName, color: formData.color });
+    const nameChanged = currentCategory.name.toLowerCase() !== newName.toLowerCase();
+    const colorChanged = currentCategory.color !== formData.color;
+
+    if (!nameChanged && !colorChanged) {
+      setEditing(null);
+      toast.info('No changes to update.');
+      return;
+    }
+
+    // Update the category (color only or name + color)
+    await base44.entities[entityName].update(id, {
+      name: nameChanged ? newName : currentCategory.name,
+      color: colorChanged ? formData.color : currentCategory.color
+    });
     
-    // Update all transactions that use this category
-    const oldName = currentCategory.name;
-    const transactionsToUpdate = transactions.filter(t => t.category === oldName);
-    
-    for (const t of transactionsToUpdate) {
-      await base44.entities[transactionEntity].update(t.id, { category: newName });
+    let transactionsToUpdate = [];
+    if (nameChanged) {
+      const oldName = currentCategory.name;
+      transactionsToUpdate = transactions.filter(t => t.category === oldName);
+      if (transactionsToUpdate.length > 0) {
+        setProgressDialog({
+          open: true,
+          title: 'Updating transactions…',
+          total: transactionsToUpdate.length,
+          done: 0
+        });
+      }
+      let updated = 0;
+      for (const t of transactionsToUpdate) {
+        await base44.entities[transactionEntity].update(t.id, { category: newName });
+        updated += 1;
+        setProgressDialog((prev) => ({ ...prev, done: updated }));
+      }
+      setProgressDialog((prev) => ({ ...prev, open: false }));
     }
     
     queryClient.invalidateQueries({ queryKey: [entityName] });
@@ -165,7 +201,11 @@ export default function CategoryManager({ type }) {
     queryClient.invalidateQueries({ queryKey: ['expenses'] });
     queryClient.invalidateQueries({ queryKey: ['income'] });
     setEditing(null);
-    toast.success(`Category renamed. ${transactionsToUpdate.length} transaction(s) updated.`);
+    if (nameChanged) {
+      toast.success(`Category renamed. ${transactionsToUpdate.length} transaction(s) updated.`);
+    } else {
+      toast.success('Category color updated.');
+    }
   };
 
   const handleMerge = async () => {
@@ -208,9 +248,21 @@ export default function CategoryManager({ type }) {
 
     const transactionsToUpdate = transactions.filter((t) => t.category === categoryToDelete.name);
     const totalAmount = transactionsToUpdate.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    if (transactionsToUpdate.length > 0) {
+      setProgressDialog({
+        open: true,
+        title: 'Moving transactions…',
+        total: transactionsToUpdate.length,
+        done: 0
+      });
+    }
+    let moved = 0;
     for (const t of transactionsToUpdate) {
       await base44.entities[transactionEntity].update(t.id, { category: targetName });
+      moved += 1;
+      setProgressDialog((prev) => ({ ...prev, done: moved }));
     }
+    setProgressDialog((prev) => ({ ...prev, open: false }));
 
     const nameLower = categoryToDelete.name.toLowerCase();
     const duplicates = rawCategories.filter((c) => c.name.toLowerCase() === nameLower);
@@ -410,6 +462,30 @@ export default function CategoryManager({ type }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={progressDialog.open} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>{progressDialog.title || 'Working…'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
+              <div
+                className="h-full bg-slate-900 transition-all"
+                style={{
+                  width:
+                    progressDialog.total > 0
+                      ? `${Math.round((progressDialog.done / progressDialog.total) * 100)}%`
+                      : '0%',
+                }}
+              />
+            </div>
+            <div className="text-sm text-slate-600">
+              {progressDialog.done} / {progressDialog.total}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog
         open={deleteDialog.open}

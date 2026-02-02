@@ -31,6 +31,7 @@ import DuplicateTransactionModal from '../Components/transactions/DuplicateTrans
 
 export default function Home() {
   const queryClient = useQueryClient();
+  const [dayKey, setDayKey] = useState(() => format(new Date(), 'yyyy-MM-dd'));
   const [selectedPeriod, setSelectedPeriod] = useSessionState('home.selectedPeriod', 'last30');
   const [showSearch, setShowSearch] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
@@ -74,6 +75,21 @@ export default function Home() {
   useEffect(() => {
     ensureStartingBalanceTransactions(accounts, queryClient);
   }, [accounts, queryClient]);
+
+  useEffect(() => {
+    const scheduleNext = () => {
+      const now = new Date();
+      const next = new Date(now);
+      next.setHours(24, 0, 0, 0);
+      const timeout = next.getTime() - now.getTime();
+      const id = setTimeout(() => {
+        setDayKey(format(new Date(), 'yyyy-MM-dd'));
+        scheduleNext();
+      }, timeout);
+      return () => clearTimeout(id);
+    };
+    return scheduleNext();
+  }, []);
 
   const deleteExpenseMutation = useMutation({
     mutationFn: (id) => base44.entities.Expense.delete(id),
@@ -220,7 +236,7 @@ export default function Home() {
     }, 0);
   };
 
-  const today = new Date();
+  const today = useMemo(() => new Date(), [dayKey]);
   const netWorthEndDate =
     selectedPeriod === 'thisMonth'
       ? endOfMonth(today)
@@ -261,9 +277,9 @@ export default function Home() {
     (t.category || '').toLowerCase() === 'system - starting balance';
 
   const goalsThisMonth = useMemo(() => {
-    const monthKey = format(new Date(), 'yyyy-MM');
-    const monthStart = startOfMonth(new Date());
-    const monthEnd = endOfMonth(new Date());
+    const monthKey = format(today, 'yyyy-MM');
+    const monthStart = startOfMonth(today);
+    const monthEnd = endOfMonth(today);
     return goals
       .filter((g) => g.start_month <= monthKey && g.end_month >= monthKey)
       .map((g) => {
@@ -285,7 +301,7 @@ export default function Home() {
           progress,
         };
       });
-  }, [goals, expenses]);
+  }, [goals, expenses, dayKey]);
 
   const allTransactions = [
     ...expenses.map(e => ({ ...e, type: 'expense' })),

@@ -163,17 +163,24 @@ export default function Settings() {
     return [...expenseTx, ...incomeTx];
   }, [expenses, income]);
 
+  const reservedCategoryNames = useMemo(
+    () => new Set(['starting balance', 'system - starting balance']),
+    []
+  );
+
   const subcategoryTotals = useMemo(() => {
     const totals = {};
     allTransactions.forEach((t) => {
       const sub = (t.subcategory || '').trim();
       if (!sub) return;
+      if (reservedCategoryNames.has((t.category || '').toLowerCase())) return;
+      if (recurringForm.type && t.type !== recurringForm.type) return;
       const key = sub.toLowerCase();
       totals[key] = totals[key] || { name: sub, total: 0 };
       totals[key].total += Number(t.amount) || 0;
     });
     return totals;
-  }, [allTransactions]);
+  }, [allTransactions, recurringForm.type, reservedCategoryNames]);
 
   const recurringSubcategoryOptions = useMemo(() => {
     return Object.values(subcategoryTotals).sort((a, b) => {
@@ -188,6 +195,8 @@ export default function Settings() {
       const sub = (t.subcategory || '').trim();
       const cat = (t.category || '').trim();
       if (!sub || !cat) return;
+      if (reservedCategoryNames.has(cat.toLowerCase())) return;
+      if (recurringForm.type && t.type !== recurringForm.type) return;
       const subKey = sub.toLowerCase();
       const catKey = cat.toLowerCase();
       if (!counts[subKey]) counts[subKey] = {};
@@ -203,7 +212,7 @@ export default function Settings() {
       if (best) result[subKey] = best.name;
     });
     return result;
-  }, [allTransactions]);
+  }, [allTransactions, recurringForm.type, reservedCategoryNames]);
 
   const [goalCategories, setGoalCategories] = useState([]);
   const [goalAmount, setGoalAmount] = useState('');
@@ -255,11 +264,6 @@ export default function Settings() {
     queryClient.invalidateQueries({ queryKey: ['goals'] });
   };
 
-  const reservedCategoryNames = useMemo(
-    () => new Set(['starting balance', 'system - starting balance']),
-    []
-  );
-
   const categoryTotals = useMemo(() => {
     const totals = {};
     allTransactions.forEach((t) => {
@@ -273,9 +277,19 @@ export default function Settings() {
 
   const categoryOptions = useMemo(() => {
     const names = new Set();
-    existingExpenseCategories.forEach((c) => names.add(c.name));
-    existingIncomeCategories.forEach((c) => names.add(c.name));
-    allTransactions.forEach((t) => t.category && names.add(t.category));
+    const allowedType = recurringForm.type;
+    existingExpenseCategories.forEach((c) => {
+      if (allowedType && allowedType !== 'expense') return;
+      names.add(c.name);
+    });
+    existingIncomeCategories.forEach((c) => {
+      if (allowedType && allowedType !== 'income') return;
+      names.add(c.name);
+    });
+    allTransactions.forEach((t) => {
+      if (allowedType && t.type !== allowedType) return;
+      if (t.category) names.add(t.category);
+    });
     const list = Array.from(names).filter(
       (name) => !reservedCategoryNames.has(name.toLowerCase())
     );
@@ -284,7 +298,14 @@ export default function Settings() {
       if (diff !== 0) return diff;
       return a.localeCompare(b);
     });
-  }, [existingExpenseCategories, existingIncomeCategories, allTransactions, categoryTotals, reservedCategoryNames]);
+  }, [
+    existingExpenseCategories,
+    existingIncomeCategories,
+    allTransactions,
+    categoryTotals,
+    reservedCategoryNames,
+    recurringForm.type,
+  ]);
 
   const matchesText = (value, filter) => {
     if (!filter?.value) return true;
@@ -1984,7 +2005,7 @@ export default function Settings() {
                       <div className="mt-2 max-h-40 overflow-auto rounded-lg border border-slate-200 p-2 space-y-1">
                         {Array.from(
                           existingExpenseCategories
-                            .filter((c) => (c.name || '').toLowerCase() !== 'system - starting balance')
+                            .filter((c) => !reservedCategoryNames.has((c.name || '').toLowerCase()))
                             .reduce((acc, c) => {
                               const name = (c.name || '').trim();
                               if (!name) return acc;
