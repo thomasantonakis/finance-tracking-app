@@ -21,7 +21,7 @@ export default function Layout({ children, currentPageName }) {
       <Toaster position="top-right" richColors closeButton />
       
       <nav
-        className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-1 py-2 shadow-lg z-50"
+        className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-1 py-2 shadow-lg z-[70] pointer-events-auto"
         style={{ height: 'calc(5rem + env(safe-area-inset-bottom))', paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="max-w-7xl mx-auto">

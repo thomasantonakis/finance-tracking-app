@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, AreaChart, Area } from 'recharts';
+import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, AreaChart, Area, ComposedChart } from 'recharts';
 import { ensureStartingBalanceTransactions, formatAmount, formatNumber, getNumberFormat, useSessionState } from '@/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
@@ -27,6 +27,9 @@ export default function Charts() {
   const [yearlyCategoryView, setYearlyCategoryView] = useState('column');
   const [yearRangeStart, setYearRangeStart] = useState('2015');
   const [yearRangeEnd, setYearRangeEnd] = useState(() => String(new Date().getFullYear() - 1));
+  const [goalsPerformanceView, setGoalsPerformanceView] = useState('column');
+  const [showCumulativeGoalsPerformance, setShowCumulativeGoalsPerformance] = useState(false);
+  const [selectedGoalCategories, setSelectedGoalCategories] = useState([]);
   const [pieModal, setPieModal] = useState({ open: false, type: 'expense' });
   const [expandedCategory, setExpandedCategory] = useState(null);
   const [expandedSubcategories, setExpandedSubcategories] = useState([]);
@@ -46,6 +49,10 @@ export default function Charts() {
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts'],
     queryFn: () => base44.entities.Account.list(),
+  });
+  const { data: goals = [] } = useQuery({
+    queryKey: ['goals'],
+    queryFn: () => base44.entities.Goal.list('-created_at'),
   });
 
   const { data: transfers = [] } = useQuery({
@@ -71,6 +78,17 @@ export default function Charts() {
     const categories = type === 'expense' ? expenseCategories : incomeCategories;
     const category = categories.find(c => c.name === categoryName);
     return category?.color || '#64748b';
+  };
+
+  const lightenColor = (hex, amount = 0.35) => {
+    if (!hex || typeof hex !== 'string') return '#cbd5f5';
+    const cleaned = hex.replace('#', '');
+    if (cleaned.length !== 6) return hex;
+    const num = parseInt(cleaned, 16);
+    const r = Math.min(255, Math.round(((num >> 16) & 0xff) * (1 - amount) + 255 * amount));
+    const g = Math.min(255, Math.round(((num >> 8) & 0xff) * (1 - amount) + 255 * amount));
+    const b = Math.min(255, Math.round((num & 0xff) * (1 - amount) + 255 * amount));
+    return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
   };
 
   const filterTransactions = (transactions) => {
@@ -496,6 +514,109 @@ export default function Charts() {
     }
     return items;
   }, [yearlyExpenseByCategory, getCategoryColor]);
+
+  const goalsCategoryOptions = useMemo(() => {
+    if (viewMode !== 'months') return [];
+    const yearKey = format(currentDate, 'yyyy');
+    const activeGoals = goals.filter((g) => {
+      const start = `${g.start_month}-01`;
+      const end = `${g.end_month}-31`;
+      return end >= `${yearKey}-01-01` && start <= `${yearKey}-12-31`;
+    });
+    return Array.from(
+      new Set(activeGoals.map((g) => (g.category || '').trim()).filter(Boolean))
+    );
+  }, [goals, currentDate, viewMode]);
+
+  const goalsPerformanceData = useMemo(() => {
+    if (viewMode !== 'months') return { data: [], categories: [] };
+    const yearKey = format(currentDate, 'yyyy');
+    const monthLabels = eachMonthOfInterval({
+      start: startOfYear(currentDate),
+      end: endOfYear(currentDate),
+    }).map((date) => ({
+      key: format(date, 'yyyy-MM'),
+      label: format(date, 'MMM'),
+      date,
+    }));
+
+    const activeGoals = goals.filter((g) => {
+      const start = `${g.start_month}-01`;
+      const end = `${g.end_month}-31`;
+      return end >= `${yearKey}-01-01` && start <= `${yearKey}-12-31`;
+    });
+    const categories = goalsCategoryOptions;
+    const activeCategories =
+      selectedGoalCategories.length > 0
+        ? categories.filter((cat) => selectedGoalCategories.includes(cat))
+        : categories;
+
+    if (activeCategories.length === 0) return { data: [], categories: [] };
+
+    const goalByCategory = {};
+    activeCategories.forEach((cat) => {
+      const goalsForCat = activeGoals.filter((g) => (g.category || '').trim() === cat);
+      goalByCategory[cat] = goalsForCat.reduce((sum, g) => sum + (Number(g.amount) || 0), 0);
+    });
+
+    const monthlyActual = {};
+    filteredExpenses.forEach((e) => {
+      const date = new Date(e.date);
+      const monthKey = format(date, 'yyyy-MM');
+      const cat = (e.category || '').trim();
+      if (!activeCategories.includes(cat)) return;
+      const dateKey = format(date, 'yyyy-MM-dd');
+      if (dateKey < `${yearKey}-01-01` || dateKey > `${yearKey}-12-31`) return;
+      if (!monthlyActual[monthKey]) monthlyActual[monthKey] = {};
+      monthlyActual[monthKey][cat] =
+        (monthlyActual[monthKey][cat] || 0) + (Number(e.amount) || 0);
+    });
+
+    const cumulativeActual = {};
+    const cumulativeGoal = {};
+    const data = monthLabels.map((m) => {
+      const row = { name: m.label, actual_total: 0, goal_total: 0 };
+      activeCategories.forEach((cat) => {
+        const goal = goalByCategory[cat] || 0;
+        const actual = monthlyActual[m.key]?.[cat] || 0;
+        if (showCumulativeGoalsPerformance) {
+          cumulativeActual[cat] = (cumulativeActual[cat] || 0) + actual;
+          cumulativeGoal[cat] = (cumulativeGoal[cat] || 0) + goal;
+          row[`actual_${cat}`] = cumulativeActual[cat];
+          row[`goal_${cat}`] = cumulativeGoal[cat];
+          row.actual_total += cumulativeActual[cat];
+          row.goal_total += cumulativeGoal[cat];
+        } else {
+          row[`actual_${cat}`] = actual;
+          row[`goal_${cat}`] = goal;
+          row.actual_total += actual;
+          row.goal_total += goal;
+        }
+      });
+      return row;
+    });
+
+    return { data, categories: activeCategories };
+  }, [
+    goals,
+    filteredExpenses,
+    currentDate,
+    viewMode,
+    showCumulativeGoalsPerformance,
+    selectedGoalCategories,
+    goalsCategoryOptions,
+  ]);
+
+  useEffect(() => {
+    if (goalsCategoryOptions.length === 0) {
+      setSelectedGoalCategories([]);
+      return;
+    }
+    setSelectedGoalCategories((prev) => {
+      const filtered = prev.filter((c) => goalsCategoryOptions.includes(c));
+      return filtered.length === 0 ? goalsCategoryOptions : filtered;
+    });
+  }, [goalsCategoryOptions]);
 
   const monthlyCategorySeries = useMemo(() => {
     const base = monthlyExpenseByCategory.categories.filter((cat) => cat !== 'Other');
@@ -1266,6 +1387,139 @@ export default function Charts() {
               {yearlyExpenseByCategory.hasOther ? ' + Other' : ''}.
             </p>
           </div>
+
+          {viewMode === 'months' && (
+            <div className="bg-white rounded-2xl p-6 border border-slate-100 mt-6">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <h2 className="text-lg font-bold text-slate-900">Goals Performance (Monthly)</h2>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setGoalsPerformanceView((prev) => (prev === 'column' ? 'area' : 'column'))}
+                    className={`rounded-full border px-4 py-1.5 text-sm font-medium transition ${
+                      goalsPerformanceView === 'column'
+                        ? 'border-slate-900 bg-slate-900 text-white'
+                        : 'border-slate-200 bg-white text-slate-600'
+                    }`}
+                  >
+                    {goalsPerformanceView === 'column' ? 'Columns' : 'Area'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowCumulativeGoalsPerformance((prev) => !prev)}
+                    className={`rounded-full border px-4 py-1.5 text-sm font-medium transition ${
+                      showCumulativeGoalsPerformance
+                        ? 'border-slate-900 bg-slate-900 text-white'
+                        : 'border-slate-200 bg-white text-slate-600'
+                    }`}
+                  >
+                    {showCumulativeGoalsPerformance ? 'Cumulative' : 'Selective'}
+                  </button>
+                </div>
+              </div>
+              {goalsCategoryOptions.length > 0 && (
+                <div className="mb-4 flex flex-wrap gap-2">
+                  {goalsCategoryOptions.map((cat) => (
+                    <label
+                      key={cat}
+                      className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${
+                        selectedGoalCategories.includes(cat)
+                          ? 'border-slate-900 bg-slate-900 text-white'
+                          : 'border-slate-200 bg-white text-slate-600'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-3 w-3"
+                        checked={selectedGoalCategories.includes(cat)}
+                        onChange={() =>
+                          setSelectedGoalCategories((prev) => {
+                            const next = prev.includes(cat)
+                              ? prev.filter((c) => c !== cat)
+                              : [...prev, cat];
+                            return next.length === 0 ? goalsCategoryOptions : next;
+                          })
+                        }
+                      />
+                      {cat}
+                    </label>
+                  ))}
+                </div>
+              )}
+              {goalsPerformanceData.categories.length === 0 ? (
+                <p className="text-sm text-slate-400">No goals for the selected year.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={320}>
+                  <ComposedChart data={goalsPerformanceData.data} barCategoryGap="20%" barGap={6}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis tickFormatter={(value) => formatNumber(value, 1)} />
+                    <Tooltip
+                      content={({ label, payload }) => {
+                        if (!payload || payload.length === 0) return null;
+                        return (
+                          <div className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] shadow-sm">
+                            <div className="text-slate-600">{label}</div>
+                            {payload.map((item) => (
+                              <div key={item.dataKey} className="flex items-center justify-between gap-3">
+                                <span className="flex items-center gap-2 text-slate-600">
+                                  <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: item.color }} />
+                                  {item.name}
+                                </span>
+                                <span className="text-slate-800 tabular-nums">€{formatAmount(item.value, 0)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }}
+                    />
+                    <Legend />
+                    {goalsPerformanceView === 'column' ? (
+                      <>
+                        {goalsPerformanceData.categories.map((cat) => (
+                          <Bar
+                            key={`actual_${cat}`}
+                            dataKey={`actual_${cat}`}
+                            stackId="actual"
+                            fill={getCategoryColor(cat, 'expense')}
+                            name={`${cat} actual`}
+                          />
+                        ))}
+                        {goalsPerformanceData.categories.map((cat) => (
+                          <Bar
+                            key={`goal_${cat}`}
+                            dataKey={`goal_${cat}`}
+                            stackId="goal"
+                            fill={lightenColor(getCategoryColor(cat, 'expense'), 0.45)}
+                            name={`${cat} goal`}
+                          />
+                        ))}
+                      </>
+                    ) : (
+                      <>
+                        <Area
+                          dataKey="actual_total"
+                          stroke="#16a34a"
+                          fill="#16a34a"
+                          fillOpacity={0.15}
+                          type="monotone"
+                          name="Actuals"
+                        />
+                        <Area
+                          dataKey="goal_total"
+                          stroke="#ef4444"
+                          fill="#ef4444"
+                          fillOpacity={0.12}
+                          type="monotone"
+                          name="Goals"
+                        />
+                      </>
+                    )}
+                  </ComposedChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          )}
         </motion.div>
       </div>
       <Dialog open={pieModal.open} onOpenChange={(open) => !open && setPieModal({ open: false, type: pieModal.type })}>
