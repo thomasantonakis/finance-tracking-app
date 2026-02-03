@@ -33,7 +33,7 @@ export default function CategoryManager({ type }) {
   const [mergeDialog, setMergeDialog] = useState({ open: false, existingCategory: null, editingId: null });
   const [deleteDialog, setDeleteDialog] = useState({ open: false, category: null, target: '', query: '', showList: false });
   const [removeUnusedDialog, setRemoveUnusedDialog] = useState({ open: false, categories: [] });
-  const [progressDialog, setProgressDialog] = useState({ open: false, title: '', total: 0, done: 0 });
+  const [progressDialog, setProgressDialog] = useState({ open: false, title: '', total: 0, done: 0, finished: false });
   const queryClient = useQueryClient();
   const deleteDropdownRef = useRef(null);
   const createInputRef = useRef(null);
@@ -248,21 +248,21 @@ export default function CategoryManager({ type }) {
 
     const transactionsToUpdate = transactions.filter((t) => t.category === categoryToDelete.name);
     const totalAmount = transactionsToUpdate.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-    if (transactionsToUpdate.length > 0) {
-      setProgressDialog({
-        open: true,
-        title: 'Moving transactions…',
-        total: transactionsToUpdate.length,
-        done: 0
-      });
-    }
+    setDeleteDialog({ open: false, category: null, target: '', query: '', showList: false });
+    setProgressDialog({
+      open: true,
+      title: 'Moving transactions…',
+      total: transactionsToUpdate.length,
+      done: 0,
+      finished: false,
+    });
     let moved = 0;
     for (const t of transactionsToUpdate) {
       await base44.entities[transactionEntity].update(t.id, { category: targetName });
       moved += 1;
       setProgressDialog((prev) => ({ ...prev, done: moved }));
     }
-    setProgressDialog((prev) => ({ ...prev, open: false }));
+    setProgressDialog((prev) => ({ ...prev, finished: true, title: 'Move completed' }));
 
     const nameLower = categoryToDelete.name.toLowerCase();
     const duplicates = rawCategories.filter((c) => c.name.toLowerCase() === nameLower);
@@ -273,7 +273,6 @@ export default function CategoryManager({ type }) {
     queryClient.invalidateQueries({ queryKey: [transactionEntity] });
     queryClient.invalidateQueries({ queryKey: ['expenses'] });
     queryClient.invalidateQueries({ queryKey: ['income'] });
-    setDeleteDialog({ open: false, category: null, target: '', query: '', showList: false });
     toast.success(
       `Category deleted. ${transactionsToUpdate.length} transaction(s) moved (total ${formatAmount(totalAmount)}).`
     );
@@ -332,6 +331,18 @@ export default function CategoryManager({ type }) {
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [deleteDialog.showList]);
+
+  useEffect(() => {
+    if (!progressDialog.open || progressDialog.finished) return;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
+  }, [progressDialog.open, progressDialog.finished]);
 
   const deleteDialogTransactions = deleteDialog.category
     ? transactions.filter((t) => t.category === deleteDialog.category.name)
@@ -463,8 +474,22 @@ export default function CategoryManager({ type }) {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={progressDialog.open} onOpenChange={() => {}}>
-        <DialogContent className="sm:max-w-[420px]">
+      <Dialog
+        open={progressDialog.open}
+        onOpenChange={(open) => {
+          if (!progressDialog.finished) return;
+          if (!open) setProgressDialog((prev) => ({ ...prev, open: false, finished: false }));
+        }}
+      >
+        <DialogContent
+          className="sm:max-w-[420px]"
+          onPointerDownOutside={(e) => {
+            if (!progressDialog.finished) e.preventDefault();
+          }}
+          onEscapeKeyDown={(e) => {
+            if (!progressDialog.finished) e.preventDefault();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>{progressDialog.title || 'Working…'}</DialogTitle>
           </DialogHeader>
@@ -483,9 +508,24 @@ export default function CategoryManager({ type }) {
             <div className="text-sm text-slate-600">
               {progressDialog.done} / {progressDialog.total}
             </div>
+            {progressDialog.finished && (
+              <div className="flex justify-end">
+                <Button
+                  className="!bg-slate-900 !text-white !border-slate-900 hover:!bg-slate-800"
+                  onClick={() =>
+                    setProgressDialog((prev) => ({ ...prev, open: false, finished: false }))
+                  }
+                >
+                  OK
+                </Button>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
+      {progressDialog.open && !progressDialog.finished && (
+        <div className="fixed inset-0 z-[10000] cursor-wait bg-black/0 pointer-events-auto" />
+      )}
 
       <AlertDialog
         open={deleteDialog.open}

@@ -527,6 +527,18 @@ export default function Settings() {
     }
   }, [expenses.length, income.length]);
 
+  useEffect(() => {
+    if (!(bulkResult.inProgress || bulkProcessing)) return;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
+  }, [bulkResult.inProgress, bulkProcessing]);
+
   const handleExport = () => {
     // Combine all transactions into CSV format
     const rows = [
@@ -1109,6 +1121,7 @@ export default function Settings() {
       const incomeCreates = [];
       const transferCreates = [];
       const accountUpdates = [];
+      let startingBalanceDetected = 0;
 
       data.forEach((row) => {
         const type = row[0]?.trim().toLowerCase();
@@ -1133,6 +1146,7 @@ export default function Settings() {
             accountUpdates.push({ id: account.id, starting_balance: startingBalance });
             accountsMap[accountName] = { ...account, starting_balance: startingBalance };
             needsStartingBalanceSync = true;
+            startingBalanceDetected += 1;
             return;
           }
           expenseCreates.push({
@@ -1152,6 +1166,7 @@ export default function Settings() {
             accountUpdates.push({ id: account.id, starting_balance: startingBalance });
             accountsMap[accountName] = { ...account, starting_balance: startingBalance };
             needsStartingBalanceSync = true;
+            startingBalanceDetected += 1;
             return;
           }
           incomeCreates.push({
@@ -1166,7 +1181,10 @@ export default function Settings() {
             important,
           });
         } else if (type === 'transfer') {
-          if (isSystemStartingBalance) return;
+          if (isSystemStartingBalance) {
+            startingBalanceDetected += 1;
+            return;
+          }
           const toAccountName = category;
           const toAccount = accountsMap[toAccountName];
           if (!toAccount) return;
@@ -1226,7 +1244,14 @@ export default function Settings() {
         await ensureStartingBalanceTransactions(Object.values(accountsMap), queryClient);
       }
 
-      setImportLogs([...logs, `\n✅ Import completed: ${imported} transactions imported successfully`]);
+      const summary = [
+        `\n✅ Import completed: ${imported} transactions imported successfully`,
+        `• Expenses: ${expenseCreates.length}`,
+        `• Income: ${incomeCreates.length}`,
+        `• Transfers: ${transferCreates.length}`,
+        `• Starting balances detected: ${startingBalanceDetected}`,
+      ];
+      setImportLogs([...logs, ...summary]);
       queryClient.invalidateQueries();
       toast.success(`Import completed: ${imported} transactions imported`);
       event.target.value = '';
@@ -1353,6 +1378,7 @@ export default function Settings() {
         pendingBulkDeleteRef.current = null;
         let successCount = 0;
         let failCount = 0;
+        const total = filteredTransactions.length;
         setBulkResult({
           open: true,
           inProgress: true,
@@ -1367,6 +1393,13 @@ export default function Settings() {
           } catch {
             failCount += 1;
           }
+          const processed = successCount + failCount;
+          setBulkProgress(Math.round((processed / Math.max(total, 1)) * 100));
+          setBulkResult((prev) => ({
+            ...prev,
+            successCount,
+            failCount,
+          }));
         }
         setBulkResult({
           open: true,
@@ -1402,6 +1435,13 @@ export default function Settings() {
         },
       });
       setBulkConfirm(false);
+      setBulkResult({
+        open: true,
+        inProgress: true,
+        successCount: 0,
+        failCount: 0,
+      });
+      setBulkProgress(0);
       return;
     }
     setBulkProcessing(true);
@@ -2098,8 +2138,22 @@ export default function Settings() {
           </div>
         </DialogContent>
       </Dialog>
-      <Dialog open={bulkConfirm} onOpenChange={setBulkConfirm}>
-        <DialogContent className="max-w-2xl">
+      <Dialog
+        open={bulkConfirm}
+        onOpenChange={(open) => {
+          if (bulkProcessing) return;
+          setBulkConfirm(open);
+        }}
+      >
+        <DialogContent
+          className="max-w-2xl"
+          onPointerDownOutside={(e) => {
+            if (bulkProcessing) e.preventDefault();
+          }}
+          onEscapeKeyDown={(e) => {
+            if (bulkProcessing) e.preventDefault();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Confirm Bulk Update</DialogTitle>
           </DialogHeader>
@@ -2154,8 +2208,22 @@ export default function Settings() {
           </div>
         </DialogContent>
       </Dialog>
-      <Dialog open={bulkResult.open} onOpenChange={(open) => !open && setBulkResult((prev) => ({ ...prev, open } ))}>
-        <DialogContent className="max-w-lg">
+      <Dialog
+        open={bulkResult.open}
+        onOpenChange={(open) => {
+          if (bulkResult.inProgress) return;
+          if (!open) setBulkResult((prev) => ({ ...prev, open }));
+        }}
+      >
+        <DialogContent
+          className="max-w-lg"
+          onPointerDownOutside={(e) => {
+            if (bulkResult.inProgress) e.preventDefault();
+          }}
+          onEscapeKeyDown={(e) => {
+            if (bulkResult.inProgress) e.preventDefault();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Bulk Update Result</DialogTitle>
           </DialogHeader>
@@ -2192,6 +2260,9 @@ export default function Settings() {
           </div>
         </DialogContent>
       </Dialog>
+      {(bulkResult.inProgress || bulkProcessing) && (
+        <div className="fixed inset-0 z-[10000] cursor-wait bg-black/0 pointer-events-auto" />
+      )}
       <div className="max-w-7xl mx-auto px-4 py-6">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
