@@ -179,6 +179,26 @@ export default function Home() {
     queryClient.invalidateQueries({ queryKey: ['transfers'] });
   };
 
+  const getClampedPrevMonthDate = (date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const day = date.getDate();
+    const prevMonth = new Date(year, month - 1, 1);
+    const daysInPrev = new Date(prevMonth.getFullYear(), prevMonth.getMonth() + 1, 0).getDate();
+    const clamped = Math.min(day, daysInPrev);
+    return new Date(prevMonth.getFullYear(), prevMonth.getMonth(), clamped);
+  };
+
+  const getClampedPrevYearDate = (date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const day = date.getDate();
+    const prevYearMonth = new Date(year - 1, month, 1);
+    const daysInPrev = new Date(prevYearMonth.getFullYear(), prevYearMonth.getMonth() + 1, 0).getDate();
+    const clamped = Math.min(day, daysInPrev);
+    return new Date(prevYearMonth.getFullYear(), prevYearMonth.getMonth(), clamped);
+  };
+
   const getPeriods = () => {
     const now = new Date();
     let reportStart;
@@ -196,16 +216,14 @@ export default function Home() {
       compareEnd = endOfDay(subDays(now, 91));
     } else if (selectedPeriod === 'thisMonth') {
       reportStart = startOfMonth(now);
-      reportEnd = endOfMonth(now);
       const lastMonth = subMonths(now, 1);
       compareStart = startOfMonth(lastMonth);
-      compareEnd = endOfMonth(lastMonth);
+      compareEnd = endOfDay(getClampedPrevMonthDate(now));
     } else if (selectedPeriod === 'thisYear') {
       reportStart = startOfYear(now);
-      reportEnd = endOfYear(now);
       const lastYear = subYears(now, 1);
       compareStart = startOfYear(lastYear);
-      compareEnd = endOfYear(lastYear);
+      compareEnd = endOfDay(getClampedPrevYearDate(now));
     }
 
     return { reportStart, reportEnd, compareStart, compareEnd };
@@ -228,12 +246,7 @@ export default function Home() {
   const today = useMemo(() => new Date(), [dayKey]);
   const mainCurrency = getMainCurrency() || 'EUR';
   const fxRates = readFxRates(mainCurrency);
-  const netWorthEndDate =
-    selectedPeriod === 'thisMonth'
-      ? endOfMonth(today)
-      : selectedPeriod === 'thisYear'
-        ? endOfYear(today)
-        : endOfDay(today);
+  const netWorthEndDate = endOfDay(today);
   const accountCurrencyMap = useMemo(
     () => new Map(accounts.map((acc) => [acc.id, acc.currency || 'EUR'])),
     [accounts]
@@ -333,18 +346,15 @@ export default function Home() {
 
   const getPreviousNetWorth = () => {
     let compareDate;
-    let inclusive = true;
 
     if (selectedPeriod === 'last30') {
       compareDate = subDays(today, 30);
     } else if (selectedPeriod === 'last90') {
       compareDate = subDays(today, 90);
     } else if (selectedPeriod === 'thisMonth') {
-      compareDate = startOfMonth(today);
-      inclusive = false;
+      compareDate = getClampedPrevMonthDate(today);
     } else if (selectedPeriod === 'thisYear') {
-      compareDate = startOfYear(today);
-      inclusive = false;
+      compareDate = getClampedPrevYearDate(today);
     }
 
     return computeNetWorthAt(compareDate);

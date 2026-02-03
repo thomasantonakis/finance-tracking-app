@@ -53,8 +53,12 @@ export default function NetWorthCard({
           <SelectContent>
             <SelectItem value="last30">Last 30 days</SelectItem>
             <SelectItem value="last90">Last 90 days</SelectItem>
-            <SelectItem value="thisMonth">This month</SelectItem>
-            <SelectItem value="thisYear">This year</SelectItem>
+            <SelectItem value="thisMonth" title="MtD vs previous month MtD">
+              MtD vs PM MtD
+            </SelectItem>
+            <SelectItem value="thisYear" title="YtD vs previous year YtD">
+              YtD vs PY YtD
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>
