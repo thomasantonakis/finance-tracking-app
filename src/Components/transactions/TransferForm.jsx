@@ -15,7 +15,7 @@ import { base44 } from '@/api/base44Client';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight } from 'lucide-react';
-import { sortAccountsByOrder, getCurrencySymbol } from '@/utils';
+import { sortAccountsByOrder, getCurrencySymbol, getMainCurrency, readFxRates } from '@/utils';
 
 export default function TransferForm({ onSuccess, onCancel, initialData, initialDate, onAfterCreate }) {
   const [loading, setLoading] = useState(false);
@@ -23,6 +23,7 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
     from_account_id: initialData?.from_account_id || '',
     to_account_id: initialData?.to_account_id || '',
     amount: initialData?.amount?.toString() || '',
+    amount_to: initialData?.amount_to?.toString() || '',
     subcategory: initialData?.subcategory || '',
     date: initialDate || format(new Date(), 'yyyy-MM-dd'),
     notes: initialData?.notes || '',
@@ -35,6 +36,7 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
       from_account_id: initialData?.from_account_id || '',
       to_account_id: initialData?.to_account_id || '',
       amount: initialData?.amount?.toString() || '',
+      amount_to: initialData?.amount_to?.toString() || '',
       subcategory: initialData?.subcategory || '',
       date: initialDate || format(new Date(), 'yyyy-MM-dd'),
       notes: initialData?.notes || '',
@@ -49,15 +51,48 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
   });
   const orderedAccounts = sortAccountsByOrder(accounts);
   const fromAccountCurrency = accounts.find((a) => a.id === formData.from_account_id)?.currency || 'EUR';
+  const toAccountCurrency = accounts.find((a) => a.id === formData.to_account_id)?.currency || 'EUR';
+  const currencyMismatch = formData.from_account_id && formData.to_account_id && fromAccountCurrency !== toAccountCurrency;
+  const mainCurrency = getMainCurrency() || 'EUR';
+  const fxRates = readFxRates(mainCurrency);
   const fromOptions = orderedAccounts.filter((account) => account.id !== formData.to_account_id);
   const toOptions = orderedAccounts.filter((account) => account.id !== formData.from_account_id);
   const sameAccountError = formData.from_account_id && formData.to_account_id && formData.from_account_id === formData.to_account_id;
+
+  const getFxRate = (from, to) => {
+    if (!fxRates?.rates) return null;
+    if (from === to) return 1;
+    if (from === mainCurrency) return fxRates.rates[to] ?? null;
+    if (to === mainCurrency) {
+      const rate = fxRates.rates[from];
+      return rate ? 1 / rate : null;
+    }
+    const rateFrom = fxRates.rates[from];
+    const rateTo = fxRates.rates[to];
+    if (!rateFrom || !rateTo) return null;
+    return rateTo / rateFrom;
+  };
+
+  const fromAmount = parseFloat(formData.amount);
+  const toAmount = parseFloat(formData.amount_to);
+  const expectedRate = currencyMismatch ? getFxRate(fromAccountCurrency, toAccountCurrency) : null;
+  const impliedRate = currencyMismatch && fromAmount > 0 && toAmount > 0 ? toAmount / fromAmount : null;
+  const fxDiff =
+    expectedRate && impliedRate ? Math.abs(impliedRate / expectedRate - 1) : null;
+  const fxWarning =
+    currencyMismatch && fxDiff !== null && fxDiff > 0.05
+      ? `⚠️ Implied FX differs by ${(fxDiff * 100).toFixed(1)}% vs yesterday's rate`
+      : null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (!formData.amount || !formData.from_account_id || !formData.to_account_id || !formData.date) {
       toast.error('Please fill in all required fields');
+      return;
+    }
+    if (currencyMismatch && !formData.amount_to) {
+      toast.error('Please enter both amounts for mismatched currencies');
       return;
     }
 
@@ -75,6 +110,7 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
     
     await base44.entities.Transfer.create({
       amount: parseFloat(formData.amount),
+      amount_to: currencyMismatch ? parseFloat(formData.amount_to) : undefined,
       from_account_id: formData.from_account_id,
       to_account_id: formData.to_account_id,
       subcategory: formData.subcategory || undefined,
@@ -169,21 +205,41 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
 
       <div className="space-y-2">
         <Label htmlFor="amount">Amount *</Label>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium">
-            {getCurrencySymbol(fromAccountCurrency)}
-          </span>
-          <Input
-            id="amount"
-            type="number"
-            step="0.01"
-            min="0"
-            placeholder="0.00"
-            className="pl-7 text-lg"
-            value={formData.amount}
-            onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-            required
-          />
+        <div className={`grid gap-3 ${currencyMismatch ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium">
+              {getCurrencySymbol(fromAccountCurrency)}
+            </span>
+            <Input
+              id="amount"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="0.00"
+              className="pl-7 text-lg"
+              value={formData.amount}
+              onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+              required
+            />
+          </div>
+          {currencyMismatch && (
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium">
+                {getCurrencySymbol(toAccountCurrency)}
+              </span>
+              <Input
+                id="amount_to"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                className="pl-7 text-lg"
+                value={formData.amount_to}
+                onChange={(e) => setFormData({ ...formData, amount_to: e.target.value })}
+                required
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -247,6 +303,9 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
           <div className="text-sm text-red-600">
             Source and destination accounts must be different.
           </div>
+        )}
+        {fxWarning && (
+          <div className="text-sm text-red-600">{fxWarning}</div>
         )}
         <div className="flex gap-3">
           <Button
