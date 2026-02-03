@@ -20,6 +20,11 @@
       "name": "end_month",
       "type": "text",
       "required": true
+    },
+    {
+      "name": "currency",
+      "type": "text",
+      "required": true
     }
   ]
 }

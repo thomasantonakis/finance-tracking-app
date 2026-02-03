@@ -20,7 +20,7 @@ import { base44 } from '@/api/base44Client';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { sortAccountsByOrder } from '@/utils';
+import { sortAccountsByOrder, getCurrencySymbol } from '@/utils';
 import CategoryCombobox from './CategoryCombobox';
 
 const expenseCategories = ['food', 'transport', 'utilities', 'entertainment', 'shopping', 'health', 'education', 'travel', 'subscriptions', 'housing', 'other'];
@@ -45,6 +45,7 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
     queryFn: () => base44.entities.Account.list(),
   });
   const orderedAccounts = sortAccountsByOrder(accounts);
+  const selectedAccountCurrency = accounts.find((a) => a.id === formData.account_id)?.currency || 'EUR';
 
   React.useEffect(() => {
     if (!transaction) return;
@@ -217,7 +218,9 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
             <div className="space-y-2">
               <Label htmlFor="amount">Amount *</Label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium">€</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium">
+                  {getCurrencySymbol(selectedAccountCurrency)}
+                </span>
                 <Input
                   id="amount"
                   type="number"

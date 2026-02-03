@@ -19,7 +19,7 @@ import {
 import { base44 } from '@/api/base44Client';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
-import { sortAccountsByOrder } from '@/utils';
+import { sortAccountsByOrder, getCurrencySymbol } from '@/utils';
 import { ArrowRight } from 'lucide-react';
 
 export default function EditTransferModal({ open, onOpenChange, transfer, onSuccess }) {
@@ -40,6 +40,7 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
     queryFn: () => base44.entities.Account.list(),
   });
   const orderedAccounts = sortAccountsByOrder(accounts);
+  const fromAccountCurrency = accounts.find((a) => a.id === formData.from_account_id)?.currency || 'EUR';
   const fromOptions = orderedAccounts.filter((account) => account.id !== formData.to_account_id);
   const toOptions = orderedAccounts.filter((account) => account.id !== formData.from_account_id);
   const sameAccountError = formData.from_account_id && formData.to_account_id && formData.from_account_id === formData.to_account_id;
@@ -162,7 +163,9 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
           <div className="space-y-2">
             <Label htmlFor="amount">Amount *</Label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium">€</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium">
+                {getCurrencySymbol(fromAccountCurrency)}
+              </span>
               <Input
                 id="amount"
                 type="number"

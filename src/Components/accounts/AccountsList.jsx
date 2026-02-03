@@ -3,7 +3,7 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { motion } from 'framer-motion';
 import { GripVertical, ChevronRight, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { formatAmount } from '@/utils';
+import { formatCurrency } from '@/utils';
 
 export default function AccountsList({ accounts, editMode, onReorder, onEdit, onDelete, onSelect, getAccountBalance, getUnclearedSum }) {
   const handleDragEnd = (result) => {
@@ -112,11 +112,11 @@ export default function AccountsList({ accounts, editMode, onReorder, onEdit, on
               <div className="flex items-center gap-2">
                 <div className="text-right">
                   <p className="text-lg font-bold text-slate-900 tabular-nums">
-                    €{formatAmount(balance)}
+                    {formatCurrency(balance, account.currency || 'EUR')}
                   </p>
                   {uncleared !== 0 && (
                     <p className="text-xs text-slate-400 tabular-nums">
-                      Uncleared: €{formatAmount(uncleared)}
+                      Uncleared: {formatCurrency(uncleared, account.currency || 'EUR')}
                     </p>
                   )}
                 </div>

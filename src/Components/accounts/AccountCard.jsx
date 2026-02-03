@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Wallet, CreditCard, PiggyBank, TrendingUp, MoreHorizontal, Edit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { formatAmount } from '@/utils';
+import { formatCurrency } from '@/utils';
 
 const categoryIcons = {
   cash: Wallet,
@@ -50,13 +50,13 @@ export default function AccountCard({ account, balance, index = 0, onEdit }) {
         <div className="flex justify-between items-center">
           <span className="text-sm text-slate-500">Current Balance</span>
           <span className="text-2xl font-bold text-slate-900 tabular-nums">
-            €{formatAmount(balance)}
+            {formatCurrency(balance, account.currency || 'EUR')}
           </span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-xs text-slate-400">Starting Balance</span>
           <span className="text-sm text-slate-600 tabular-nums">
-            €{formatAmount(account.starting_balance)}
+            {formatCurrency(account.starting_balance, account.currency || 'EUR')}
           </span>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { motion } from 'framer-motion';
@@ -8,7 +8,8 @@ import { toast } from 'sonner';
 import AccountForm from '../Components/accounts/AccountForm';
 import AccountsList from '../Components/accounts/AccountsList';
 import AccountTransactionsList from '../Components/accounts/AccountTransactionsList';
-import { ensureStartingBalanceTransactions, formatAmount } from '@/utils';
+import { ensureStartingBalanceTransactions, formatAmount, formatCurrency, getMainCurrency, readFxRates, writeFxRates, getFxProvider } from '@/utils';
+import { format, subDays } from 'date-fns';
 import { getAccountsOrder, setAccountsOrder } from '@/utils';
 import {
   Dialog,
@@ -283,6 +284,105 @@ export default function Accounts() {
     window.scrollTo(0, 0);
   }, [selectedAccount]);
 
+  const displayAccounts = orderedAccounts.length > 0 ? orderedAccounts : accounts;
+  const totalBalance = displayAccounts.reduce((sum, acc) => sum + getAccountBalance(acc.id), 0);
+  const currencySet = new Set(displayAccounts.map((acc) => acc.currency || 'EUR'));
+  const totalCurrency = currencySet.size === 1 ? Array.from(currencySet)[0] : null;
+  const mainCurrency = getMainCurrency() || 'EUR';
+  const [fxRates, setFxRates] = useState(() => readFxRates(mainCurrency));
+
+  useEffect(() => {
+    const stored = readFxRates(mainCurrency);
+    if (stored) setFxRates(stored);
+  }, [mainCurrency]);
+
+  useEffect(() => {
+    const getRateDateKey = () => {
+      const now = new Date();
+      const hourUTC = now.getUTCHours();
+      const base = hourUTC >= 4 ? now : subDays(now, 1);
+      return format(base, 'yyyy-MM-dd');
+    };
+
+    const fetchRates = async () => {
+      let dateKey = getRateDateKey();
+      if (fxRates?.date === dateKey) return;
+      let attempts = 0;
+      while (attempts < 7) {
+        try {
+          const provider = getFxProvider();
+          const url =
+            provider === "frankfurter.app"
+              ? `https://api.frankfurter.app/${dateKey}?from=${mainCurrency}`
+              : `https://api.exchangerate.host/${dateKey}?base=${mainCurrency}`;
+          const res = await fetch(url);
+          if (!res.ok) throw new Error('Failed to fetch FX rates');
+          const data = await res.json();
+          const rates = data?.rates || data?.data?.rates;
+          if (rates && Object.keys(rates).length > 0) {
+            const payload = { date: dateKey, rates };
+            writeFxRates(mainCurrency, payload);
+            setFxRates(payload);
+            return;
+          }
+        } catch {
+          // try previous day
+        }
+        attempts += 1;
+        dateKey = format(subDays(new Date(dateKey), 1), 'yyyy-MM-dd');
+      }
+    };
+
+    const scheduleNextFetch = () => {
+      const now = new Date();
+      const next = new Date(now);
+      next.setUTCHours(4, 0, 0, 0);
+      if (next <= now) next.setUTCDate(next.getUTCDate() + 1);
+      const timeout = next.getTime() - now.getTime();
+      const id = setTimeout(async () => {
+        await fetchRates();
+        scheduleNextFetch();
+      }, timeout);
+      return () => clearTimeout(id);
+    };
+
+    fetchRates();
+    return scheduleNextFetch();
+  }, [mainCurrency, fxRates]);
+
+  const totalsByCurrency = useMemo(() => {
+    const totals = {};
+    displayAccounts.forEach((acc) => {
+      const code = acc.currency || 'EUR';
+      totals[code] = (totals[code] || 0) + getAccountBalance(acc.id);
+    });
+    return totals;
+  }, [displayAccounts, getAccountBalance]);
+
+  const totalsWithMain = useMemo(() => {
+    const rates = fxRates?.rates || {};
+    return Object.entries(totalsByCurrency).map(([code, amount]) => {
+      const rate = code === mainCurrency ? 1 : rates[code];
+      const mainEquivalent = rate ? amount / rate : null;
+      return { code, amount, rate, mainEquivalent };
+    });
+  }, [totalsByCurrency, fxRates, mainCurrency]);
+
+  const totalInMainCurrency = useMemo(() => {
+    return totalsWithMain.reduce((sum, item) => {
+      if (item.mainEquivalent === null) return sum;
+      return sum + item.mainEquivalent;
+    }, 0);
+  }, [totalsWithMain]);
+
+  const totalsSorted = useMemo(() => {
+    return [...totalsWithMain].sort((a, b) => {
+      const aVal = a.mainEquivalent ?? -Infinity;
+      const bVal = b.mainEquivalent ?? -Infinity;
+      return bVal - aVal;
+    });
+  }, [totalsWithMain]);
+
   if (selectedAccount) {
     const account = accounts.find(a => a.id === selectedAccount);
     const balance = getAccountBalance(selectedAccount);
@@ -291,6 +391,8 @@ export default function Accounts() {
       ...income.filter(i => i.account_id === selectedAccount).map(i => ({ ...i, type: 'income' })),
       ...transfers.filter(t => t.from_account_id === selectedAccount || t.to_account_id === selectedAccount).map(t => ({ ...t, type: 'transfer' }))
     ].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    const accountCurrency = account?.currency || 'EUR';
 
     return (
       <div className="min-h-screen bg-slate-50 pb-24">
@@ -314,7 +416,9 @@ export default function Accounts() {
               </div>
               <div className="text-center py-4">
                 <p className="text-sm text-slate-500 mb-1">Current Balance</p>
-                <p className="text-4xl font-bold text-slate-900 tabular-nums">€{formatAmount(balance)}</p>
+                <p className="text-4xl font-bold text-slate-900 tabular-nums">
+                  {formatCurrency(balance, accountCurrency)}
+                </p>
               </div>
             </div>
 
@@ -334,7 +438,9 @@ export default function Accounts() {
                 </div>
                 <div className="justify-self-end text-right">
                   <div className="text-sm text-slate-500">Balance</div>
-                  <div className="font-semibold text-slate-900 tabular-nums">€{formatAmount(balance)}</div>
+                  <div className="font-semibold text-slate-900 tabular-nums">
+                    {formatCurrency(balance, accountCurrency)}
+                  </div>
                 </div>
               </div>
             </div>
@@ -343,6 +449,7 @@ export default function Accounts() {
               selectedAccount={selectedAccount}
               transactions={allTransactions}
               getAccountName={getAccountName}
+              currency={accountCurrency}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
             />
@@ -351,9 +458,6 @@ export default function Accounts() {
       </div>
     );
   }
-
-  const displayAccounts = orderedAccounts.length > 0 ? orderedAccounts : accounts;
-  const totalBalance = displayAccounts.reduce((sum, acc) => sum + getAccountBalance(acc.id), 0);
 
   const getUnclearedSum = (accountId) => {
     const accountExpenses = expenses.filter((e) => e.account_id === accountId && e.cleared === false);
@@ -405,8 +509,33 @@ export default function Accounts() {
               <div>
                 <p className="text-sm text-slate-500">Total Balance</p>
               </div>
-              <p className="text-2xl font-bold text-slate-900 tabular-nums text-right">€{formatAmount(totalBalance)}</p>
+              <p className="text-2xl font-bold text-slate-900 tabular-nums text-right">
+                {formatCurrency(totalInMainCurrency, mainCurrency)}
+              </p>
             </div>
+            {Object.keys(totalsByCurrency).length > 0 && (
+              <div className="mt-3 border-t border-slate-100 pt-3 space-y-1">
+                {totalsSorted.map(({ code, amount, rate, mainEquivalent }) => (
+                  <div key={code} className="flex items-center justify-between text-sm text-slate-600">
+                    <span className="font-medium">{code}</span>
+                    <div className="text-right tabular-nums">
+                      {formatCurrency(amount, code)}
+                      {code !== mainCurrency && rate && mainEquivalent !== null && (
+                        <span className="text-xs text-slate-400 ml-2">
+                          × {(1 / rate).toFixed(3)} = {formatCurrency(mainEquivalent, mainCurrency)}
+                        </span>
+                      )}
+                      {code !== mainCurrency && (!rate || mainEquivalent === null) && (
+                        <span className="text-xs text-slate-400 ml-2">× — = —</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <p className="text-xs text-slate-400">
+                  Uses {fxRates?.date ? `${fxRates.date} FX rates` : 'yesterday FX rates'} when available.
+                </p>
+              </div>
+            )}
           </div>
 
           {displayAccounts.length === 0 ? (

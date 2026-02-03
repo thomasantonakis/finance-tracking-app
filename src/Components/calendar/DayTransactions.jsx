@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import EditTransactionModal from '../transactions/EditTransactionModal';
 import EditTransferModal from '../transactions/EditTransferModal';
 import DuplicateTransactionModal from '../transactions/DuplicateTransactionModal';
-import { formatAmount } from '@/utils';
+import { formatAmount, formatCurrency } from '@/utils';
 
 export default function DayTransactions({ 
   selectedDate, 
@@ -28,6 +28,11 @@ export default function DayTransactions({
   const getAccountName = (accountId) => {
     const account = accounts.find(a => a.id === accountId);
     return account ? account.name : 'Unknown';
+  };
+
+  const getAccountCurrency = (accountId) => {
+    const account = accounts.find((a) => a.id === accountId);
+    return account?.currency || 'EUR';
   };
 
   const handleEdit = (transaction, type) => {
@@ -84,6 +89,16 @@ export default function DayTransactions({
   const totalExpenses = dayExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
   const totalIncome = dayIncome.reduce((sum, i) => sum + (i.amount || 0), 0);
   const netTotal = totalIncome - totalExpenses;
+  const currencySet = new Set(
+    allTransactions
+      .map((t) =>
+        t.type === 'transfer'
+          ? getAccountCurrency(t.from_account_id)
+          : getAccountCurrency(t.account_id)
+      )
+      .filter(Boolean)
+  );
+  const netCurrency = currencySet.size === 1 ? Array.from(currencySet)[0] : 'EUR';
 
   return (
     <div className="bg-white rounded-2xl p-4 border border-slate-100">
@@ -100,7 +115,7 @@ export default function DayTransactions({
           <p className={`text-2xl font-bold tabular-nums ${
             netTotal >= 0 ? 'text-green-600' : 'text-red-600'
           }`}>
-            €{formatAmount(Math.abs(netTotal))}
+            {formatCurrency(Math.abs(netTotal), netCurrency)}
           </p>
           <p className="text-xs text-slate-400">Net</p>
         </div>
@@ -185,8 +200,16 @@ export default function DayTransactions({
                       ? 'text-blue-600'
                       : 'text-red-600'
                   }`}>
-                    {transaction.type === 'transfer' ? '' : transaction.type === 'income' ? '+' : '-'}€{formatAmount(transaction.amount)}
-                  </p>
+                  {transaction.type === 'transfer' ? '' : transaction.type === 'income' ? '+' : '-'}
+                  {formatCurrency(
+                    transaction.amount,
+                    getAccountCurrency(
+                      transaction.type === 'transfer'
+                        ? transaction.from_account_id
+                        : transaction.account_id
+                    )
+                  )}
+                </p>
                   {!isStartingBalance(transaction) && (
                     <>
                       <div className="hidden sm:flex items-center gap-2 mt-1">

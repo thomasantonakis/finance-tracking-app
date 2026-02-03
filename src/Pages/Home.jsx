@@ -14,16 +14,17 @@ import {
   subMonths,
   subYears,
   format,
+  parseISO,
 } from 'date-fns';
 import NetWorthCard from '../Components/dashboard/NetWorthCard';
 import RecentTransactions from '../Components/dashboard/RecentTransactions';
 import FloatingAddButton from '../Components/transactions/FloatingAddButton';
-import { ensureStartingBalanceTransactions, useSessionState } from '@/utils';
+import { ensureStartingBalanceTransactions, useSessionState, getMainCurrency, readFxRates } from '@/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { formatAmount } from '@/utils';
+import { formatAmount, formatCurrency } from '@/utils';
 import { Edit, Copy, Trash2 } from 'lucide-react';
 import EditTransactionModal from '../Components/transactions/EditTransactionModal';
 import EditTransferModal from '../Components/transactions/EditTransferModal';
@@ -76,6 +77,11 @@ export default function Home() {
     ensureStartingBalanceTransactions(accounts, queryClient);
   }, [accounts, queryClient]);
 
+  const getAccountCurrency = (accountId) => {
+    const account = accounts.find((a) => a.id === accountId);
+    return account?.currency || 'EUR';
+  };
+
   useEffect(() => {
     const scheduleNext = () => {
       const now = new Date();
@@ -89,6 +95,14 @@ export default function Home() {
       return () => clearTimeout(id);
     };
     return scheduleNext();
+  }, []);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const nextKey = format(new Date(), 'yyyy-MM-dd');
+      setDayKey((prev) => (prev === nextKey ? prev : nextKey));
+    }, 60 * 1000);
+    return () => clearInterval(id);
   }, []);
 
   const deleteExpenseMutation = useMutation({
@@ -211,10 +225,59 @@ export default function Home() {
   const comparisonIncome = filterByRange(income, compareStart, compareEnd);
   const comparisonExpenses = filterByRange(expenses, compareStart, compareEnd);
 
-  const totalIncome = filteredIncome.reduce((sum, item) => sum + (item.amount || 0), 0);
-  const totalExpenses = filteredExpenses.reduce((sum, item) => sum + (item.amount || 0), 0);
-  const comparisonIncomeTotal = comparisonIncome.reduce((sum, item) => sum + (item.amount || 0), 0);
-  const comparisonExpensesTotal = comparisonExpenses.reduce((sum, item) => sum + (item.amount || 0), 0);
+  const today = useMemo(() => new Date(), [dayKey]);
+  const mainCurrency = getMainCurrency() || 'EUR';
+  const fxRates = readFxRates(mainCurrency);
+  const netWorthEndDate =
+    selectedPeriod === 'thisMonth'
+      ? endOfMonth(today)
+      : selectedPeriod === 'thisYear'
+        ? endOfYear(today)
+        : endOfDay(today);
+  const accountCurrencyMap = useMemo(
+    () => new Map(accounts.map((acc) => [acc.id, acc.currency || 'EUR'])),
+    [accounts]
+  );
+
+  const convertToMain = (amount, currency) => {
+    if (currency === mainCurrency) return amount;
+    const rate = fxRates?.rates?.[currency];
+    if (!rate) return null;
+    return amount / rate;
+  };
+
+  const sumByAccountInRange = (items, startDate, endDate) => {
+    const map = new Map();
+    items.forEach((item) => {
+      const itemDate = new Date(item.date);
+      if (itemDate < startDate || itemDate > endDate) return;
+      const current = map.get(item.account_id) || 0;
+      map.set(item.account_id, current + (Number(item.amount) || 0));
+    });
+    return map;
+  };
+
+  const sumConvertedByAccount = (map) => {
+    let total = 0;
+    accounts.forEach((acc) => {
+      const amount = map.get(acc.id) || 0;
+      const currency = accountCurrencyMap.get(acc.id) || 'EUR';
+      const converted = convertToMain(amount, currency);
+      if (converted === null) return;
+      total += converted;
+    });
+    return total;
+  };
+
+  const reportIncomeMap = sumByAccountInRange(income, reportStart, reportEnd);
+  const reportExpenseMap = sumByAccountInRange(expenses, reportStart, reportEnd);
+  const compareIncomeMap = sumByAccountInRange(income, compareStart, compareEnd);
+  const compareExpenseMap = sumByAccountInRange(expenses, compareStart, compareEnd);
+
+  const totalIncome = sumConvertedByAccount(reportIncomeMap);
+  const totalExpenses = sumConvertedByAccount(reportExpenseMap);
+  const comparisonIncomeTotal = sumConvertedByAccount(compareIncomeMap);
+  const comparisonExpensesTotal = sumConvertedByAccount(compareExpenseMap);
 
   const incomeDelta = totalIncome - comparisonIncomeTotal;
   const expenseDelta = totalExpenses - comparisonExpensesTotal;
@@ -236,14 +299,37 @@ export default function Home() {
     }, 0);
   };
 
-  const today = useMemo(() => new Date(), [dayKey]);
-  const netWorthEndDate =
-    selectedPeriod === 'thisMonth'
-      ? endOfMonth(today)
-      : selectedPeriod === 'thisYear'
-        ? endOfYear(today)
-        : endOfDay(today);
-  const currentNetWorth = sumUntilDate(income, netWorthEndDate, true) - sumUntilDate(expenses, netWorthEndDate, true);
+  const computeAccountBalanceAt = (accountId, endDate) => {
+    let balance = 0;
+    income.forEach((t) => {
+      if (t.account_id !== accountId) return;
+      if (new Date(t.date) <= endDate) balance += Number(t.amount) || 0;
+    });
+    expenses.forEach((t) => {
+      if (t.account_id !== accountId) return;
+      if (new Date(t.date) <= endDate) balance -= Number(t.amount) || 0;
+    });
+    transfers.forEach((t) => {
+      if (new Date(t.date) > endDate) return;
+      if (t.from_account_id === accountId) balance -= Number(t.amount) || 0;
+      if (t.to_account_id === accountId) balance += Number(t.amount) || 0;
+    });
+    return balance;
+  };
+
+  const computeNetWorthAt = (endDate) => {
+    let total = 0;
+    accounts.forEach((acc) => {
+      const localBalance = computeAccountBalanceAt(acc.id, endDate);
+      const currency = accountCurrencyMap.get(acc.id) || 'EUR';
+      const converted = convertToMain(localBalance, currency);
+      if (converted === null) return;
+      total += converted;
+    });
+    return total;
+  };
+
+  const currentNetWorth = computeNetWorthAt(netWorthEndDate);
 
   const getPreviousNetWorth = () => {
     let compareDate;
@@ -261,7 +347,7 @@ export default function Home() {
       inclusive = false;
     }
 
-    return sumUntilDate(income, compareDate, inclusive) - sumUntilDate(expenses, compareDate, inclusive);
+    return computeNetWorthAt(compareDate);
   };
 
   const previousNetWorth = getPreviousNetWorth();
@@ -282,6 +368,7 @@ export default function Home() {
     const monthEnd = endOfMonth(today);
     return goals
       .filter((g) => g.start_month <= monthKey && g.end_month >= monthKey)
+      .filter((g) => (g.currency || mainCurrency) === mainCurrency)
       .map((g) => {
         const goalCategory = (g.category || '').trim().toLowerCase();
         const spent = expenses
@@ -301,7 +388,7 @@ export default function Home() {
           progress,
         };
       });
-  }, [goals, expenses, dayKey]);
+  }, [goals, expenses, dayKey, mainCurrency]);
 
   const allTransactions = [
     ...expenses.map(e => ({ ...e, type: 'expense' })),
@@ -310,7 +397,11 @@ export default function Home() {
   ]
     .filter((t) => t.type === 'transfer' || !isSystemStarting(t))
     .filter((t) => t.projected !== true)
-    .filter((t) => new Date(t.date) <= today)
+    .filter((t) => {
+      if (!t.date) return false;
+      const localDateKey = format(parseISO(t.date), 'yyyy-MM-dd');
+      return localDateKey <= dayKey;
+    })
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 10);
 
@@ -589,7 +680,15 @@ export default function Home() {
                         ? 'text-blue-600'
                         : 'text-red-600'
                     }`}>
-                      {transaction.type === 'transfer' ? '' : transaction.type === 'income' ? '+' : '-'}€{formatAmount(transaction.amount)}
+                      {transaction.type === 'transfer' ? '' : transaction.type === 'income' ? '+' : '-'}
+                      {formatCurrency(
+                        transaction.amount,
+                        getAccountCurrency(
+                          transaction.type === 'transfer'
+                            ? transaction.from_account_id
+                            : transaction.account_id
+                        )
+                      )}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">

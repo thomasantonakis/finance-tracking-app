@@ -5,12 +5,13 @@ import { Button } from '@/components/ui/button';
 import EditTransactionModal from '../transactions/EditTransactionModal';
 import EditTransferModal from '../transactions/EditTransferModal';
 import DuplicateTransactionModal from '../transactions/DuplicateTransactionModal';
-import { formatAmount } from '@/utils';
+import { formatAmount, formatCurrency } from '@/utils';
 
 export default function AccountTransactionsList({ 
   selectedAccount, 
   transactions, 
   getAccountName,
+  currency = 'EUR',
   onUpdate,
   onDelete
 }) {
@@ -26,6 +27,14 @@ export default function AccountTransactionsList({
   const getUpdatedStamp = (t) => t?.updated_at ?? t?.updated_date ?? getCreatedStamp(t);
   const isStartingBalance = (t) =>
     t?.type !== 'transfer' && (t?.category || '').toLowerCase() === 'starting balance';
+  const safeFormatDate = (value) => {
+    try {
+      const d = parseISO(value);
+      return Number.isNaN(d?.getTime?.()) ? '—' : format(d, 'MMM d');
+    } catch {
+      return '—';
+    }
+  };
 
   const startingBalanceTransactions = transactions.filter(isStartingBalance);
   const displayTransactions = transactions.filter((t) => !isStartingBalance(t));
@@ -145,6 +154,11 @@ export default function AccountTransactionsList({
           Show only uncleared
         </label>
       </div>
+      {sortedMonths.length === 0 && (
+        <div className="bg-white rounded-2xl p-6 border border-slate-100 text-center text-sm text-slate-400">
+          No transactions to show.
+        </div>
+      )}
       {sortedMonths.map(monthKey => (
         <div key={monthKey} className="bg-white rounded-2xl p-4 border border-slate-100">
           <div className="sticky top-0 z-10 bg-white/90 backdrop-blur py-1">
@@ -211,7 +225,7 @@ export default function AccountTransactionsList({
                         )}
                       </div>
                       <div className="flex items-center gap-2 text-xs text-slate-400">
-                        <span>{format(parseISO(transaction.date), 'MMM d')}</span>
+                        <span>{safeFormatDate(transaction.date)}</span>
                         {transaction.cleared === false && (
                           <span className="inline-flex items-center text-amber-600" title="Not cleared">
                             <AlertCircle className="w-3.5 h-3.5" />
@@ -233,9 +247,11 @@ export default function AccountTransactionsList({
                             {transaction.type === 'income' ? '+' : 
                              transaction.type === 'transfer' ?
                                (transaction.from_account_id === selectedAccount ? '-' : '+')
-                             : '-'}€{formatAmount(transaction.amount)}
+                             : '-'}{formatCurrency(transaction.amount, currency)}
                         </p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">Bal: €{formatAmount(transactionBalance)}</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          Bal: {formatCurrency(transactionBalance, currency)}
+                        </p>
                       {!isStarting && (
                         <>
                           <div className="hidden sm:flex items-center gap-2 mt-1">
@@ -339,7 +355,7 @@ export default function AccountTransactionsList({
           const sign = startTx?.type === 'income' ? '+' : '-';
           return (
         <div className="flex items-center justify-end px-2 pt-1 text-[11px] text-slate-400">
-          Start Balance: {sign}€{formatAmount(startTx?.amount || 0)}
+          Start Balance: {sign}{formatCurrency(startTx?.amount || 0, currency)}
         </div>
           );
         })()

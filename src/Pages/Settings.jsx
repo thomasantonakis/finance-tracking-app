@@ -19,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ensureStartingBalanceTransactions, formatAmount, getNumberFormat, setNumberFormat } from '@/utils';
+import { ensureStartingBalanceTransactions, formatAmount, getNumberFormat, setNumberFormat, getMainCurrency, setMainCurrency, getFxProvider, setFxProvider, writeFxRates } from '@/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import CategoryCombobox from '@/Components/transactions/CategoryCombobox';
@@ -219,6 +219,10 @@ export default function Settings() {
   const [goalStartMonth, setGoalStartMonth] = useState('');
   const [goalEndMonth, setGoalEndMonth] = useState('');
   const [showGoals, setShowGoals] = useState(false);
+  const [mainCurrency, setMainCurrencyState] = useState(() => getMainCurrency() || 'EUR');
+  const [goalCurrency, setGoalCurrency] = useState(() => getMainCurrency() || 'EUR');
+  const [fxProvider, setFxProviderState] = useState(() => getFxProvider());
+  const [fxRefreshing, setFxRefreshing] = useState(false);
 
   const toggleGoalCategory = (name) => {
     setGoalCategories((prev) =>
@@ -239,6 +243,10 @@ export default function Settings() {
       toast.error('Select a start and end month.');
       return;
     }
+    if (!goalCurrency) {
+      toast.error('Select a currency for the goal.');
+      return;
+    }
     if (goalStartMonth > goalEndMonth) {
       toast.error('Start month must be before end month.');
       return;
@@ -249,6 +257,7 @@ export default function Settings() {
         amount: Number(goalAmount),
         start_month: goalStartMonth,
         end_month: goalEndMonth,
+        currency: goalCurrency,
       });
     }
     toast.success('Goals created.');
@@ -256,12 +265,64 @@ export default function Settings() {
     setGoalAmount('');
     setGoalStartMonth('');
     setGoalEndMonth('');
+    setGoalCurrency(mainCurrency || 'EUR');
     queryClient.invalidateQueries({ queryKey: ['goals'] });
   };
 
   const handleDeleteGoal = async (goalId) => {
     await base44.entities.Goal.delete(goalId);
     queryClient.invalidateQueries({ queryKey: ['goals'] });
+  };
+
+  useEffect(() => {
+    if (!accounts.length) return;
+    const stored = getMainCurrency();
+    if (stored) {
+      setMainCurrencyState(stored);
+      setGoalCurrency((prev) => prev || stored);
+      return;
+    }
+    const currencies = Array.from(new Set(accounts.map((a) => a.currency || 'EUR')));
+    const fallback = currencies[0] || 'EUR';
+    setMainCurrency(fallback);
+    setMainCurrencyState(fallback);
+    setGoalCurrency((prev) => prev || fallback);
+  }, [accounts]);
+
+  const refreshFxRates = async () => {
+    setFxRefreshing(true);
+    const now = new Date();
+    const attemptDate = (offsetDays) => {
+      const d = new Date(now);
+      d.setUTCDate(d.getUTCDate() - offsetDays);
+      return format(d, 'yyyy-MM-dd');
+    };
+    let attempts = 0;
+    const base = mainCurrency || 'EUR';
+    while (attempts < 10) {
+      const dateKey = attemptDate(attempts);
+      try {
+        const url =
+          fxProvider === 'frankfurter.app'
+            ? `https://api.frankfurter.app/${dateKey}?from=${base}`
+            : `https://api.exchangerate.host/${dateKey}?base=${base}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to fetch FX rates');
+        const data = await res.json();
+        const rates = data?.rates || data?.data?.rates;
+        if (rates && Object.keys(rates).length > 0) {
+          writeFxRates(base, { date: dateKey, rates });
+          toast.success(`FX rates updated (${dateKey})`);
+          setFxRefreshing(false);
+          return;
+        }
+      } catch {
+        // try previous day
+      }
+      attempts += 1;
+    }
+    toast.error('Could not fetch FX rates. Try again later.');
+    setFxRefreshing(false);
   };
 
   const categoryTotals = useMemo(() => {
@@ -574,21 +635,19 @@ export default function Settings() {
       const total = expensesToDelete.length + incomeToDelete.length + transfersToDelete.length;
       let deleted = 0;
 
-      for (const expense of expensesToDelete) {
-        await base44.entities.Expense.delete(expense.id);
-        deleted++;
-        setDeleteProgress(Math.round((deleted / total) * 100));
-      }
-      for (const inc of incomeToDelete) {
-        await base44.entities.Income.delete(inc.id);
-        deleted++;
-        setDeleteProgress(Math.round((deleted / total) * 100));
-      }
-      for (const transfer of transfersToDelete) {
-        await base44.entities.Transfer.delete(transfer.id);
-        deleted++;
-        setDeleteProgress(Math.round((deleted / total) * 100));
-      }
+      const deleteInChunks = async (items, entity) => {
+        const chunkSize = 200;
+        for (let i = 0; i < items.length; i += chunkSize) {
+          const chunk = items.slice(i, i + chunkSize);
+          await Promise.all(chunk.map((item) => base44.entities[entity].delete(item.id)));
+          deleted += chunk.length;
+          setDeleteProgress(Math.round((deleted / total) * 100));
+        }
+      };
+
+      await deleteInChunks(expensesToDelete, 'Expense');
+      await deleteInChunks(incomeToDelete, 'Income');
+      await deleteInChunks(transfersToDelete, 'Transfer');
 
       queryClient.invalidateQueries();
       toast.success('All data deleted successfully');
@@ -1949,6 +2008,75 @@ export default function Settings() {
                     </Select>
                   </div>
                 </div>
+                <div className="w-full flex items-center gap-3 p-4">
+                  <div className="p-2 rounded-lg bg-slate-50">
+                    <span className="text-slate-600 font-semibold">FX</span>
+                  </div>
+                  <div className="flex-1 text-left">
+                    <p className="font-medium text-slate-900">Exchange Rates</p>
+                    <p className="text-sm text-slate-500">Pick provider, then refresh rates</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={fxProvider}
+                      onValueChange={(value) => {
+                        setFxProvider(value);
+                        setFxProviderState(value);
+                      }}
+                    >
+                      <SelectTrigger className="w-44">
+                        <SelectValue placeholder="Provider" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="exchangerate.host">exchangerate.host</SelectItem>
+                        <SelectItem value="frankfurter.app">frankfurter.app</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      onClick={refreshFxRates}
+                      disabled={fxRefreshing}
+                    >
+                      {fxRefreshing ? 'Refreshing…' : 'Refresh FX'}
+                    </Button>
+                  </div>
+                </div>
+                <div className="w-full flex items-center gap-3 p-4">
+                  <div className="p-2 rounded-lg bg-slate-50">
+                    <span className="text-slate-600 font-semibold">¤</span>
+                  </div>
+                  <div className="flex-1 text-left">
+                    <p className="font-medium text-slate-900">Main Currency</p>
+                    <p className="text-sm text-slate-500">Used for charts + rollups</p>
+                  </div>
+                  <div className="w-64">
+                    <Select
+                      value={mainCurrency}
+                      onValueChange={(value) => {
+                        setMainCurrency(value);
+                        setMainCurrencyState(value);
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select currency" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from(
+                          new Set([
+                            ...accounts.map((a) => a.currency || 'EUR'),
+                            mainCurrency,
+                            'EUR',
+                          ].filter(Boolean))
+                        ).map((code) => (
+                          <SelectItem key={code} value={code}>
+                            {code}
+                          </SelectItem>
+                        ))}
+                        {!accounts.length && <SelectItem value="EUR">EUR</SelectItem>}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
                 <button
                   onClick={() => setShowGoals((prev) => !prev)}
                   className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors"
@@ -1969,7 +2097,7 @@ export default function Settings() {
 
                 {showGoals && (
                   <div className="w-full flex flex-col gap-4 p-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       <div>
                         <Label className="text-xs text-slate-500">Goal Amount (per month)</Label>
                         <Input
@@ -1999,6 +2127,27 @@ export default function Settings() {
                           />
                         </div>
                       </div>
+                      <div>
+                        <Label className="text-xs text-slate-500">Currency</Label>
+                        <Select value={goalCurrency} onValueChange={setGoalCurrency}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Currency" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from(
+                              new Set([
+                                ...accounts.map((a) => a.currency || 'EUR'),
+                                mainCurrency,
+                                'EUR',
+                              ].filter(Boolean))
+                            ).map((code) => (
+                              <SelectItem key={code} value={code}>
+                                {code}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                     <div>
                       <Label className="text-xs text-slate-500">Categories (select one or more)</Label>
@@ -2014,17 +2163,26 @@ export default function Settings() {
                               return acc;
                             }, new Map())
                             .values()
-                        ).map((name) => (
-                          <label key={name} className="flex items-center gap-2 text-sm text-slate-700">
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 rounded border-slate-300"
-                              checked={goalCategories.includes(name)}
-                              onChange={() => toggleGoalCategory(name)}
-                            />
-                            {name}
-                          </label>
-                        ))}
+                        )
+                          .map((name) => ({
+                            name,
+                            count: expenses.filter((e) => (e.category || '') === name).length,
+                          }))
+                          .sort((a, b) => {
+                            if (a.count !== b.count) return b.count - a.count;
+                            return a.name.localeCompare(b.name);
+                          })
+                          .map(({ name }) => (
+                            <label key={name} className="flex items-center gap-2 text-sm text-slate-700">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-slate-300"
+                                checked={goalCategories.includes(name)}
+                                onChange={() => toggleGoalCategory(name)}
+                              />
+                              {name}
+                            </label>
+                          ))}
                         {existingExpenseCategories.length === 0 && (
                           <p className="text-sm text-slate-400">No expense categories available.</p>
                         )}
@@ -2050,7 +2208,7 @@ export default function Settings() {
                               <div>
                                 <p className="text-sm text-slate-900">{goal.category}</p>
                                 <p className="text-xs text-slate-500">
-                                  €{formatAmount(goal.amount)} · {goal.start_month} → {goal.end_month}
+                                  {(goal.currency || mainCurrency || 'EUR')} {formatAmount(goal.amount)} · {goal.start_month} → {goal.end_month}
                                 </p>
                               </div>
                               <Button

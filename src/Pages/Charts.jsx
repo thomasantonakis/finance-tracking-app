@@ -9,12 +9,16 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, AreaChart, Area, ComposedChart } from 'recharts';
-import { ensureStartingBalanceTransactions, formatAmount, formatNumber, getNumberFormat, useSessionState } from '@/utils';
+import { ensureStartingBalanceTransactions, formatAmount, formatNumber, getNumberFormat, getMainCurrency, useSessionState } from '@/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 export default function Charts() {
   const [currentDate, setCurrentDate] = useSessionState('charts.currentDate', () => new Date());
   const [viewMode, setViewMode] = useSessionState('charts.viewMode', 'days'); // days, months, custom
+  const [chartCurrency, setChartCurrency] = useSessionState(
+    'charts.currency',
+    getMainCurrency() || 'EUR'
+  );
   const [selectedAccount, setSelectedAccount] = useSessionState('charts.selectedAccount', 'all');
   const [chartType, setChartType] = useSessionState('charts.chartType', 'networth'); // networth, expense, income
   const [showCleared, setShowCleared] = useState(true);
@@ -50,6 +54,38 @@ export default function Charts() {
     queryKey: ['accounts'],
     queryFn: () => base44.entities.Account.list(),
   });
+
+  const availableCurrencies = useMemo(() => {
+    const codes = new Set(accounts.map((acc) => acc.currency || 'EUR'));
+    const main = getMainCurrency();
+    if (main) codes.add(main);
+    if (codes.size === 0) codes.add('EUR');
+    return Array.from(codes);
+  }, [accounts]);
+
+  useEffect(() => {
+    if (!availableCurrencies.length) return;
+    if (!availableCurrencies.includes(chartCurrency)) {
+      setChartCurrency(availableCurrencies[0]);
+    }
+  }, [availableCurrencies, chartCurrency, setChartCurrency]);
+
+  useEffect(() => {
+    const syncMain = () => {
+      const main = getMainCurrency();
+      if (main && main !== chartCurrency) {
+        setChartCurrency(main);
+      }
+    };
+    const id = setInterval(syncMain, 1000);
+    return () => clearInterval(id);
+  }, [chartCurrency, setChartCurrency]);
+
+  const accountCurrencyMap = useMemo(() => {
+    return new Map(accounts.map((acc) => [acc.id, acc.currency || 'EUR']));
+  }, [accounts]);
+
+  const getAccountCurrency = (accountId) => accountCurrencyMap.get(accountId) || 'EUR';
   const { data: goals = [] } = useQuery({
     queryKey: ['goals'],
     queryFn: () => base44.entities.Goal.list('-created_at'),
@@ -101,7 +137,11 @@ export default function Charts() {
         : isTransfer
           ? (t.from_account_id === selectedAccount || t.to_account_id === selectedAccount)
           : t.account_id === selectedAccount;
-      return clearedMatch && projectedMatch && accountMatch;
+      const currencyMatch = isTransfer
+        ? getAccountCurrency(t.from_account_id) === chartCurrency &&
+          getAccountCurrency(t.to_account_id) === chartCurrency
+        : getAccountCurrency(t.account_id) === chartCurrency;
+      return clearedMatch && projectedMatch && accountMatch && currencyMatch;
     });
   };
 
@@ -521,12 +561,13 @@ export default function Charts() {
     const activeGoals = goals.filter((g) => {
       const start = `${g.start_month}-01`;
       const end = `${g.end_month}-31`;
-      return end >= `${yearKey}-01-01` && start <= `${yearKey}-12-31`;
+      const currencyMatch = (g.currency || chartCurrency) === chartCurrency;
+      return end >= `${yearKey}-01-01` && start <= `${yearKey}-12-31` && currencyMatch;
     });
     return Array.from(
       new Set(activeGoals.map((g) => (g.category || '').trim()).filter(Boolean))
     );
-  }, [goals, currentDate, viewMode]);
+  }, [goals, currentDate, viewMode, chartCurrency]);
 
   const goalsPerformanceData = useMemo(() => {
     if (viewMode !== 'months') return { data: [], categories: [] };
@@ -543,7 +584,8 @@ export default function Charts() {
     const activeGoals = goals.filter((g) => {
       const start = `${g.start_month}-01`;
       const end = `${g.end_month}-31`;
-      return end >= `${yearKey}-01-01` && start <= `${yearKey}-12-31`;
+      const currencyMatch = (g.currency || chartCurrency) === chartCurrency;
+      return end >= `${yearKey}-01-01` && start <= `${yearKey}-12-31` && currencyMatch;
     });
     const categories = goalsCategoryOptions;
     const activeCategories =
@@ -605,6 +647,7 @@ export default function Charts() {
     showCumulativeGoalsPerformance,
     selectedGoalCategories,
     goalsCategoryOptions,
+    chartCurrency,
   ]);
 
   useEffect(() => {
@@ -782,19 +825,33 @@ export default function Charts() {
                 </Button>
               </div>
 
-              <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-                <SelectTrigger className="w-44">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" label="All Accounts">All Accounts</SelectItem>
-                  {accounts.map(account => (
-                    <SelectItem key={account.id} value={account.id} label={account.name}>
-                      {account.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-3">
+                <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+                  <SelectTrigger className="w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all" label="All Accounts">All Accounts</SelectItem>
+                    {accounts.map(account => (
+                      <SelectItem key={account.id} value={account.id} label={account.name}>
+                        {account.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={chartCurrency} onValueChange={setChartCurrency}>
+                  <SelectTrigger className="w-28">
+                    <SelectValue placeholder="Currency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableCurrencies.map((code) => (
+                      <SelectItem key={code} value={code}>
+                        {code}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="flex gap-4">
@@ -808,7 +865,7 @@ export default function Charts() {
                 </SelectContent>
               </Select>
 
-              <div className="flex gap-4 ml-auto">
+              <div className="flex gap-3 ml-auto items-center">
                 <label className="flex items-center gap-2">
                   <input
                     type="checkbox"

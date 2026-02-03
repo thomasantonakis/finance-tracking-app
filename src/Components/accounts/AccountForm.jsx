@@ -20,8 +20,27 @@ import {
 } from "@/components/ui/alert-dialog";
 import { base44 } from '@/api/base44Client';
 import { toast } from 'sonner';
+import { getCurrencySymbol } from '@/utils';
 
 const accountCategories = ['cash', 'bank', 'credit_card', 'savings', 'investment', 'other'];
+const currencyOptions = [
+  { code: 'EUR', label: 'Euro (EUR)' },
+  { code: 'USD', label: 'US Dollar (USD)' },
+  { code: 'GBP', label: 'British Pound (GBP)' },
+  { code: 'CHF', label: 'Swiss Franc (CHF)' },
+  { code: 'SEK', label: 'Swedish Krona (SEK)' },
+  { code: 'NOK', label: 'Norwegian Krone (NOK)' },
+  { code: 'DKK', label: 'Danish Krone (DKK)' },
+  { code: 'PLN', label: 'Polish Zloty (PLN)' },
+  { code: 'CZK', label: 'Czech Koruna (CZK)' },
+  { code: 'HUF', label: 'Hungarian Forint (HUF)' },
+  { code: 'RON', label: 'Romanian Leu (RON)' },
+  { code: 'BGN', label: 'Bulgarian Lev (BGN)' },
+  { code: 'TRY', label: 'Turkish Lira (TRY)' },
+  { code: 'JPY', label: 'Japanese Yen (JPY)' },
+  { code: 'AUD', label: 'Australian Dollar (AUD)' },
+  { code: 'CAD', label: 'Canadian Dollar (CAD)' }
+];
 
 const STARTING_BALANCE_DATE = '1970-01-01';
 const STARTING_BALANCE_CATEGORY = 'starting balance';
@@ -107,12 +126,14 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
     name: account.name,
     starting_balance: account.starting_balance.toString(),
     category: account.category,
-    color: account.color
+    color: account.color,
+    currency: account.currency || 'EUR'
   } : {
     name: '',
     starting_balance: '',
     category: '',
-    color: colorOptions[0]
+    color: colorOptions[0],
+    currency: 'EUR'
   });
 
   const capitalizeFirst = (value) => {
@@ -124,7 +145,7 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.starting_balance || !formData.category) {
+    if (!formData.name || !formData.starting_balance || !formData.category || !formData.currency) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -138,14 +159,16 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
         account.name !== normalizedName ||
         Number(account.starting_balance) !== Number(normalizedBalance) ||
         account.category !== formData.category ||
-        account.color !== formData.color;
+        account.color !== formData.color ||
+        (account.currency || 'EUR') !== formData.currency;
 
       if (hasChanges) {
         await base44.entities.Account.update(account.id, {
           name: normalizedName,
           starting_balance: normalizedBalance,
           category: formData.category,
-          color: formData.color
+          color: formData.color,
+          currency: formData.currency
         });
         await ensureStartingBalanceTransaction(account.id, normalizedBalance);
         toast.success('Account updated successfully');
@@ -157,7 +180,8 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
         name: normalizedName,
         starting_balance: normalizedBalance,
         category: formData.category,
-        color: formData.color
+        color: formData.color,
+        currency: formData.currency
       });
       await ensureStartingBalanceTransaction(created.id, normalizedBalance);
       toast.success('Account created successfully');
@@ -234,7 +258,9 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
       <div className="space-y-2">
         <Label htmlFor="starting_balance">Starting Balance *</Label>
         <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium">€</span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium">
+            {getCurrencySymbol(formData.currency || 'EUR')}
+          </span>
           <Input
             id="starting_balance"
             type="number"
@@ -263,6 +289,27 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
             {accountCategories.map((cat) => (
               <SelectItem key={cat} value={cat}>
                 {cat.replace('_', ' ').charAt(0).toUpperCase() + cat.replace('_', ' ').slice(1)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="currency">Currency *</Label>
+        <Select
+          value={formData.currency}
+          onValueChange={(value) => setFormData({ ...formData, currency: value })}
+          required
+          className="w-full"
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select currency" />
+          </SelectTrigger>
+          <SelectContent>
+            {currencyOptions.map((currency) => (
+              <SelectItem key={currency.code} value={currency.code}>
+                {currency.label}
               </SelectItem>
             ))}
           </SelectContent>

@@ -25,13 +25,18 @@
     "color": {
       "type": "string",
       "description": "Color for visual identification"
+    },
+    "currency": {
+      "type": "string",
+      "description": "Account currency code (ISO 4217)"
     }
   },
   "required": [
     "name",
     "starting_balance",
     "category",
-    "color"
+    "color",
+    "currency"
   ],
   "rls": {
     "create": {

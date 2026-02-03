@@ -8,7 +8,7 @@ import { base44 } from '@/api/base44Client';
 import EditTransactionModal from '../transactions/EditTransactionModal';
 import EditTransferModal from '../transactions/EditTransferModal';
 import DuplicateTransactionModal from '../transactions/DuplicateTransactionModal';
-import { formatAmount } from '@/utils';
+import { formatAmount, formatCurrency } from '@/utils';
 
 export default function RecentTransactions({ transactions, onDelete, onUpdate }) {
   const [editingTransaction, setEditingTransaction] = useState(null);
@@ -37,6 +37,11 @@ export default function RecentTransactions({ transactions, onDelete, onUpdate })
   const getAccountName = (accountId) => {
     const account = accounts.find(a => a.id === accountId);
     return account ? account.name : 'Unknown';
+  };
+
+  const getAccountCurrency = (accountId) => {
+    const account = accounts.find((a) => a.id === accountId);
+    return account?.currency || 'EUR';
   };
 
   useEffect(() => {
@@ -159,7 +164,15 @@ export default function RecentTransactions({ transactions, onDelete, onUpdate })
                     ? 'text-blue-600'
                     : 'text-red-600'
                 }`}>
-                  {transaction.type === 'transfer' ? '' : transaction.type === 'income' ? '+' : '-'}€{formatAmount(transaction.amount)}
+                  {transaction.type === 'transfer' ? '' : transaction.type === 'income' ? '+' : '-'}
+                  {formatCurrency(
+                    transaction.amount,
+                    getAccountCurrency(
+                      transaction.type === 'transfer'
+                        ? transaction.from_account_id
+                        : transaction.account_id
+                    )
+                  )}
                 </p>
                 {!isStartingBalance(transaction) && (
                   <>

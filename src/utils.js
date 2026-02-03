@@ -25,6 +25,9 @@ export function createPageUrl(name) {
 const DUPLICATE_DATE_KEY = "__base44_duplicate_date__";
 const NUMBER_FORMAT_KEY = "__base44_number_format__";
 const ACCOUNTS_ORDER_KEY = "__base44_accounts_order__";
+const MAIN_CURRENCY_KEY = "__base44_main_currency__";
+const FX_RATES_KEY_PREFIX = "__base44_fx_rates__";
+const FX_PROVIDER_KEY = "__base44_fx_provider__";
 
 export function getDuplicateDate() {
   try {
@@ -63,6 +66,61 @@ export function setNumberFormat(value) {
   }
 }
 
+export function getMainCurrency() {
+  try {
+    return localStorage.getItem(MAIN_CURRENCY_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setMainCurrency(value) {
+  if (!value) return;
+  try {
+    localStorage.setItem(MAIN_CURRENCY_KEY, value);
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+export function getFxRatesKey(baseCurrency) {
+  return `${FX_RATES_KEY_PREFIX}_${baseCurrency || "EUR"}`;
+}
+
+export function readFxRates(baseCurrency) {
+  try {
+    const raw = localStorage.getItem(getFxRatesKey(baseCurrency));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeFxRates(baseCurrency, payload) {
+  try {
+    localStorage.setItem(getFxRatesKey(baseCurrency), JSON.stringify(payload));
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+export function getFxProvider() {
+  try {
+    return localStorage.getItem(FX_PROVIDER_KEY) || "exchangerate.host";
+  } catch {
+    return "exchangerate.host";
+  }
+}
+
+export function setFxProvider(value) {
+  if (!value) return;
+  try {
+    localStorage.setItem(FX_PROVIDER_KEY, value);
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
 export function formatAmount(value, decimals = 2) {
   const format = getNumberFormat();
   const locale = format === "dot" ? "de-DE" : "en-US";
@@ -94,6 +152,41 @@ export function formatNumber(value, maxDecimals = 1) {
     minimumFractionDigits: 0,
     maximumFractionDigits: maxDecimals,
   }).format(safe);
+}
+
+export function formatCurrency(value, currency = "EUR", decimals = 2) {
+  const format = getNumberFormat();
+  const locale = format === "dot" ? "de-DE" : "en-US";
+  const num = Number(value);
+  const safe = Number.isFinite(num) ? num : 0;
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency,
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    }).format(safe);
+  } catch {
+    return `${currency} ${formatAmount(safe, decimals)}`;
+  }
+}
+
+export function getCurrencySymbol(currency = "EUR") {
+  const format = getNumberFormat();
+  const locale = format === "dot" ? "de-DE" : "en-US";
+  try {
+    const parts = new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency,
+      currencyDisplay: "narrowSymbol",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).formatToParts(0);
+    const currencyPart = parts.find((p) => p.type === "currency");
+    return currencyPart?.value || currency;
+  } catch {
+    return currency;
+  }
 }
 
 export function getAccountsOrder() {
