@@ -19,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ensureStartingBalanceTransactions, formatAmount, getNumberFormat, setNumberFormat, getMainCurrency, setMainCurrency, getFxProvider, setFxProvider, writeFxRates } from '@/utils';
+import { ensureStartingBalanceTransactions, formatAmount, getNumberFormat, setNumberFormat, getMainCurrency, setMainCurrency, getFxProvider, setFxProvider, writeFxRates, setStartingBalanceSyncEnabled } from '@/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import CategoryCombobox from '@/Components/transactions/CategoryCombobox';
@@ -51,7 +51,9 @@ export default function Settings() {
     description: '',
     confirmLabel: 'Confirm',
     onConfirm: null,
+    showHardDeleteToggle: false,
   });
+  const [deleteAccountsHard, setDeleteAccountsHard] = useState(false);
   const [bulkFilters, setBulkFilters] = useState({
     type: 'all',
     dateFrom: '',
@@ -162,6 +164,21 @@ export default function Settings() {
     const incomeTx = income.map((i) => ({ ...i, type: 'income' }));
     return [...expenseTx, ...incomeTx];
   }, [expenses, income]);
+
+  const bulkTransactions = useMemo(() => {
+    const expenseTx = expenses.map((e) => ({ ...e, type: 'expense' }));
+    const incomeTx = income.map((i) => ({ ...i, type: 'income' }));
+    const transferTx = transfers.map((t) => ({ ...t, type: 'transfer' }));
+    return [...expenseTx, ...incomeTx, ...transferTx];
+  }, [expenses, income, transfers]);
+
+  const accountNameById = useMemo(() => {
+    const map = new Map();
+    accounts.forEach((acc) => {
+      map.set(acc.id, acc.name);
+    });
+    return map;
+  }, [accounts]);
 
   const reservedCategoryNames = useMemo(
     () => new Set(['starting balance', 'system - starting balance']),
@@ -379,8 +396,8 @@ export default function Settings() {
   };
 
   const filteredTransactions = useMemo(() => {
-    return allTransactions.filter((t) => {
-      if (reservedCategoryNames.has((t.category || '').toLowerCase())) return false;
+    return bulkTransactions.filter((t) => {
+      if (t.type !== 'transfer' && reservedCategoryNames.has((t.category || '').toLowerCase())) return false;
 
       if (bulkFilters.type !== 'all' && t.type !== bulkFilters.type) return false;
       if (bulkFilters.dateFrom) {
@@ -403,12 +420,29 @@ export default function Settings() {
         const projectedVal = bulkFilters.projected === 'true';
         if (t.projected !== projectedVal) return false;
       }
-      if (!matchesText(t.category, bulkFilters.text.category)) return false;
-      if (!matchesText(t.subcategory, bulkFilters.text.subcategory)) return false;
+      const categoryValue =
+        t.type === 'transfer'
+          ? accountNameById.get(t.from_account_id) || ''
+          : t.category;
+      const subcategoryValue =
+        t.type === 'transfer'
+          ? accountNameById.get(t.to_account_id) || ''
+          : t.subcategory;
+      if (t.type === 'transfer') {
+        if (bulkFilters.text.category.value) {
+          if ((categoryValue || '').toLowerCase() !== bulkFilters.text.category.value.toLowerCase()) return false;
+        }
+        if (bulkFilters.text.subcategory.value) {
+          if ((subcategoryValue || '').toLowerCase() !== bulkFilters.text.subcategory.value.toLowerCase()) return false;
+        }
+      } else {
+        if (!matchesText(categoryValue, bulkFilters.text.category)) return false;
+        if (!matchesText(subcategoryValue, bulkFilters.text.subcategory)) return false;
+      }
       if (!matchesText(t.notes, bulkFilters.text.notes)) return false;
       return true;
     });
-  }, [allTransactions, bulkFilters, reservedCategoryNames]);
+  }, [bulkTransactions, bulkFilters, reservedCategoryNames, accountNameById]);
 
   const bulkSummary = useMemo(() => {
     const parts = [];
@@ -499,7 +533,10 @@ export default function Settings() {
       ['Type', 'Date', 'Amount', 'Account', 'Category', 'Subcategory', 'Notes', 'Cleared', 'Projected', 'Important']
     ];
 
-    const isStartingBalance = (t) => (t.category || '').toLowerCase() === 'starting balance';
+  const isStartingBalance = (t) => {
+    const category = (t.category || '').trim().toLowerCase();
+    return category === 'starting balance' || category === 'system - starting balance';
+  };
 
     expenses.forEach(e => {
       if (isStartingBalance(e)) return;
@@ -659,19 +696,21 @@ export default function Settings() {
   };
 
   const handleDeleteAllAccounts = async () => {
+    setDeleteAccountsHard(false);
     setConfirmDialog({
       open: true,
       title: 'Delete all accounts?',
-      description: 'This will permanently delete ALL accounts. This action cannot be undone.',
+      description: 'This will permanently delete ALL accounts that have no regular transactions. This action cannot be undone.',
       confirmLabel: 'Delete all accounts',
+      showHardDeleteToggle: true,
       onConfirm: async () => {
         setConfirmDialog((prev) => ({ ...prev, open: false }));
-        await runDeleteAllAccounts();
+        await runDeleteAllAccounts({ hardDeleteStartingBalance: deleteAccountsHard });
       },
     });
   };
 
-  const runDeleteAllAccounts = async () => {
+  const runDeleteAllAccounts = async ({ hardDeleteStartingBalance = false } = {}) => {
 
     setDeleting(true);
     setDeleteProgress(0);
@@ -679,24 +718,81 @@ export default function Settings() {
     setShowDeleteAccountsReport(false);
 
     try {
-      const expensesToCheck = await base44.entities.Expense.list();
-      const incomeToCheck = await base44.entities.Income.list();
+      if (hardDeleteStartingBalance) {
+        setStartingBalanceSyncEnabled(false);
+      }
+      let expensesToCheck = await base44.entities.Expense.list();
+      let incomeToCheck = await base44.entities.Income.list();
       const transfersToCheck = await base44.entities.Transfer.list();
-      const accountsToDelete = await base44.entities.Account.list();
+      let accountsToDelete = await base44.entities.Account.list();
       const total = accountsToDelete.length || 1;
       let deleted = 0;
       const deletedNames = [];
       const skippedNames = [];
+      const deleteMany = async (entity, ids) => {
+        if (!ids.length) return;
+        const api = base44.entities[entity];
+        if (api.deleteMany) {
+          await api.deleteMany(ids);
+        } else {
+          await Promise.all(ids.map((id) => api.delete(id)));
+        }
+      };
+      const updateMany = async (entity, items) => {
+        if (!items.length) return;
+        const api = base44.entities[entity];
+        if (api.updateMany) {
+          await api.updateMany(items);
+        } else {
+          await Promise.all(items.map((item) => api.update(item.id, item)));
+        }
+      };
+
+      if (hardDeleteStartingBalance) {
+        const isStarting = (t) => {
+          const category = (t.category || '').trim().toLowerCase();
+          return category === 'starting balance' || category === 'system - starting balance';
+        };
+        const startingExpenseIds = expensesToCheck.filter(isStarting).map((e) => e.id);
+        const startingIncomeIds = incomeToCheck.filter(isStarting).map((i) => i.id);
+        await deleteMany('Expense', startingExpenseIds);
+        await deleteMany('Income', startingIncomeIds);
+
+        const zeroUpdates = accountsToDelete.map((acc) => ({
+          id: acc.id,
+          starting_balance: 0,
+        }));
+        await updateMany('Account', zeroUpdates);
+
+        expensesToCheck = await base44.entities.Expense.list();
+        incomeToCheck = await base44.entities.Income.list();
+        accountsToDelete = await base44.entities.Account.list();
+      }
+
+      const isStarting = (t) => {
+        const category = (t.category || '').trim().toLowerCase();
+        return category === 'starting balance' || category === 'system - starting balance';
+      };
+      const accountHasRegularExpense = new Map();
+      const accountHasRegularIncome = new Map();
+
+      expensesToCheck.forEach((e) => {
+        if (isStarting(e)) return;
+        accountHasRegularExpense.set(e.account_id, true);
+      });
+      incomeToCheck.forEach((i) => {
+        if (isStarting(i)) return;
+        accountHasRegularIncome.set(i.account_id, true);
+      });
 
       for (const acc of accountsToDelete) {
-        const isStarting = (t) => (t.category || '').toLowerCase() === 'starting balance';
-        const accExpenses = expensesToCheck.filter((e) => e.account_id === acc.id);
-        const accIncome = incomeToCheck.filter((i) => i.account_id === acc.id);
-        const hasExpense = accExpenses.some((e) => !isStarting(e));
-        const hasIncome = accIncome.some((i) => !isStarting(i));
+        const hasExpense = accountHasRegularExpense.get(acc.id) === true;
+        const hasIncome = accountHasRegularIncome.get(acc.id) === true;
         const hasTransfer = transfersToCheck.some(
           (t) => t.from_account_id === acc.id || t.to_account_id === acc.id
         );
+        const accExpenses = expensesToCheck.filter((e) => e.account_id === acc.id);
+        const accIncome = incomeToCheck.filter((i) => i.account_id === acc.id);
         const startingIncome = accIncome.find(isStarting);
         const startingExpense = accExpenses.find(isStarting);
         const startingAmount = startingIncome
@@ -706,7 +802,7 @@ export default function Settings() {
           : 0;
         const hasNonZeroStarting = Math.abs(Number(startingAmount) || 0) > 0;
 
-        if (hasExpense || hasIncome || hasTransfer || hasNonZeroStarting) {
+        if (hasExpense || hasIncome || hasTransfer || (!hardDeleteStartingBalance && hasNonZeroStarting)) {
           skippedNames.push(acc.name);
         } else {
           await base44.entities.Account.delete(acc.id);
@@ -724,8 +820,11 @@ export default function Settings() {
       setShowDeleteAccountsReport(true);
       toast.success('Account deletion completed');
     } catch (error) {
-      toast.error('Failed to delete accounts');
+      toast.error(`Failed to delete accounts${error?.message ? `: ${error.message}` : ''}`);
     } finally {
+      if (hardDeleteStartingBalance) {
+        setStartingBalanceSyncEnabled(true);
+      }
       setDeleting(false);
       setDeleteProgress(0);
     }
@@ -925,149 +1024,203 @@ export default function Settings() {
 
       let imported = 0;
       let needsStartingBalanceSync = false;
-      for (let i = 0; i < data.length; i++) {
-        const row = data[i];
-        const rowNumber = i + 2;
-        
-        try {
-          const type = row[0]?.trim().toLowerCase();
-          const date = row[1]?.trim();
-          const amount = parseFloat(row[2]);
-          const accountName = row[3]?.trim();
-          const category = row[4]?.trim();
-          const subcategory = row[5]?.trim() || undefined;
-          const notes = row[6] || undefined;
-          const cleared = row[7]?.trim().toLowerCase() === 'yes';
-          const projected = row[8]?.trim().toLowerCase() === 'yes';
-          const important = row[9]?.trim().toLowerCase() === 'yes';
-          const isSystemStartingBalance =
-            (category || '').toLowerCase() === 'system - starting balance';
+      const chunkArray = (arr, size) => {
+        const out = [];
+        for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+        return out;
+      };
 
-          // Auto-create account if it doesn't exist
-          if (!accountsMap[accountName]) {
-            const newAccount = await base44.entities.Account.create({
-              name: accountName,
+      const accountNames = new Set();
+      const expenseCatNames = new Set();
+      const incomeCatNames = new Set();
+
+      data.forEach((row) => {
+        const type = row[0]?.trim().toLowerCase();
+        const accountName = row[3]?.trim();
+        const category = row[4]?.trim();
+        if (accountName) accountNames.add(accountName);
+        if (type === 'transfer' && category) accountNames.add(category);
+        if (type === 'expense' && category && category.toLowerCase() !== 'system - starting balance') {
+          expenseCatNames.add(category);
+        }
+        if (type === 'income' && category && category.toLowerCase() !== 'system - starting balance') {
+          incomeCatNames.add(category);
+        }
+      });
+
+      const missingAccounts = Array.from(accountNames).filter((name) => !accountsMap[name]);
+      for (const chunk of chunkArray(missingAccounts, 50)) {
+        const created = await Promise.all(
+          chunk.map((name, idx) =>
+            base44.entities.Account.create({
+              name,
               starting_balance: 0,
               category: 'bank',
-              color: defaultColors[Object.keys(accountsMap).length % defaultColors.length]
-            });
-            accountsMap[accountName] = newAccount;
-            logs.push(`Row ${rowNumber}: Created new account "${accountName}"`);
-          }
-
-          const account = accountsMap[accountName];
-
-          if (type === 'expense') {
-            if (isSystemStartingBalance) {
-              const startingBalance = -Math.abs(amount);
-              await base44.entities.Account.update(account.id, {
-                starting_balance: startingBalance,
-              });
-              accountsMap[accountName] = { ...account, starting_balance: startingBalance };
-              logs.push(`Row ${rowNumber}: Set starting balance for "${accountName}"`);
-              needsStartingBalanceSync = true;
-              continue;
-            }
-            // Auto-create expense category if it doesn't exist (case-insensitive check)
-            const existingCat = Object.keys(expenseCatsMap).find(
-              key => key.toLowerCase() === category.toLowerCase()
-            );
-            if (category && !existingCat) {
-              const newCat = await base44.entities.ExpenseCategory.create({
-                name: category,
-                color: defaultColors[Object.keys(expenseCatsMap).length % defaultColors.length],
-                order: Object.keys(expenseCatsMap).length
-              });
-              expenseCatsMap[category] = newCat;
-              logs.push(`Row ${rowNumber}: Created new expense category "${category}"`);
-            }
-
-            await base44.entities.Expense.create({
-              amount,
-              category,
-              subcategory,
-              account_id: account.id,
-              date,
-              notes,
-              cleared,
-              projected,
-              important
-            });
-            imported++;
-          } else if (type === 'income') {
-            if (isSystemStartingBalance) {
-              const startingBalance = Math.abs(amount);
-              await base44.entities.Account.update(account.id, {
-                starting_balance: startingBalance,
-              });
-              accountsMap[accountName] = { ...account, starting_balance: startingBalance };
-              logs.push(`Row ${rowNumber}: Set starting balance for "${accountName}"`);
-              needsStartingBalanceSync = true;
-              continue;
-            }
-            // Auto-create income category if it doesn't exist (case-insensitive check)
-            const existingCat = Object.keys(incomeCatsMap).find(
-              key => key.toLowerCase() === category.toLowerCase()
-            );
-            if (category && !existingCat) {
-              const newCat = await base44.entities.IncomeCategory.create({
-                name: category,
-                color: defaultColors[Object.keys(incomeCatsMap).length % defaultColors.length],
-                order: Object.keys(incomeCatsMap).length
-              });
-              incomeCatsMap[category] = newCat;
-              logs.push(`Row ${rowNumber}: Created new income category "${category}"`);
-            }
-
-            await base44.entities.Income.create({
-              amount,
-              category,
-              subcategory,
-              account_id: account.id,
-              date,
-              notes,
-              cleared,
-              projected,
-              important
-            });
-            imported++;
-          } else if (type === 'transfer') {
-            if (isSystemStartingBalance) {
-              logs.push(`Row ${rowNumber}: Skipped - Starting balance rows must be income/expense`);
-              continue;
-            }
-            const toAccountName = category;
-            
-            // Auto-create destination account if it doesn't exist
-            if (!accountsMap[toAccountName]) {
-              const newAccount = await base44.entities.Account.create({
-                name: toAccountName,
-                starting_balance: 0,
-                category: 'bank',
-                color: defaultColors[Object.keys(accountsMap).length % defaultColors.length]
-              });
-              accountsMap[toAccountName] = newAccount;
-              logs.push(`Row ${rowNumber}: Created new account "${toAccountName}"`);
-            }
-
-            const toAccount = accountsMap[toAccountName];
-            await base44.entities.Transfer.create({
-              amount,
-              from_account_id: account.id,
-              to_account_id: toAccount.id,
-              date,
-              notes
-            });
-            imported++;
-          } else {
-            logs.push(`Row ${rowNumber}: Skipped - Invalid type "${type}"`);
-          }
-
-          setImportProgress(Math.round(((i + 1) / data.length) * 100));
-        } catch (error) {
-          logs.push(`Row ${rowNumber}: Error - ${error.message}`);
-        }
+              color: defaultColors[(Object.keys(accountsMap).length + idx) % defaultColors.length],
+              currency: 'EUR',
+            })
+          )
+        );
+        created.forEach((acc) => {
+          accountsMap[acc.name] = acc;
+          logs.push(`Created new account "${acc.name}"`);
+        });
       }
+
+      const missingExpenseCats = Array.from(expenseCatNames).filter(
+        (name) => !Object.keys(expenseCatsMap).some((key) => key.toLowerCase() === name.toLowerCase())
+      );
+      for (const chunk of chunkArray(missingExpenseCats, 50)) {
+        const created = await Promise.all(
+          chunk.map((name, idx) =>
+            base44.entities.ExpenseCategory.create({
+              name,
+              color: defaultColors[(Object.keys(expenseCatsMap).length + idx) % defaultColors.length],
+              order: Object.keys(expenseCatsMap).length + idx,
+            })
+          )
+        );
+        created.forEach((cat) => {
+          expenseCatsMap[cat.name] = cat;
+          logs.push(`Created new expense category "${cat.name}"`);
+        });
+      }
+
+      const missingIncomeCats = Array.from(incomeCatNames).filter(
+        (name) => !Object.keys(incomeCatsMap).some((key) => key.toLowerCase() === name.toLowerCase())
+      );
+      for (const chunk of chunkArray(missingIncomeCats, 50)) {
+        const created = await Promise.all(
+          chunk.map((name, idx) =>
+            base44.entities.IncomeCategory.create({
+              name,
+              color: defaultColors[(Object.keys(incomeCatsMap).length + idx) % defaultColors.length],
+              order: Object.keys(incomeCatsMap).length + idx,
+            })
+          )
+        );
+        created.forEach((cat) => {
+          incomeCatsMap[cat.name] = cat;
+          logs.push(`Created new income category "${cat.name}"`);
+        });
+      }
+
+      const expenseCreates = [];
+      const incomeCreates = [];
+      const transferCreates = [];
+      const accountUpdates = [];
+
+      data.forEach((row) => {
+        const type = row[0]?.trim().toLowerCase();
+        const date = row[1]?.trim();
+        const amount = parseFloat(row[2]);
+        const accountName = row[3]?.trim();
+        const category = row[4]?.trim();
+        const subcategory = row[5]?.trim() || undefined;
+        const notes = row[6] || undefined;
+        const cleared = row[7]?.trim().toLowerCase() === 'yes';
+        const projected = row[8]?.trim().toLowerCase() === 'yes';
+        const important = row[9]?.trim().toLowerCase() === 'yes';
+        const isSystemStartingBalance =
+          (category || '').toLowerCase() === 'system - starting balance';
+
+        const account = accountsMap[accountName];
+        if (!account) return;
+
+        if (type === 'expense') {
+          if (isSystemStartingBalance) {
+            const startingBalance = -Math.abs(amount);
+            accountUpdates.push({ id: account.id, starting_balance: startingBalance });
+            accountsMap[accountName] = { ...account, starting_balance: startingBalance };
+            needsStartingBalanceSync = true;
+            return;
+          }
+          expenseCreates.push({
+            amount,
+            category,
+            subcategory,
+            account_id: account.id,
+            date,
+            notes,
+            cleared,
+            projected,
+            important,
+          });
+        } else if (type === 'income') {
+          if (isSystemStartingBalance) {
+            const startingBalance = Math.abs(amount);
+            accountUpdates.push({ id: account.id, starting_balance: startingBalance });
+            accountsMap[accountName] = { ...account, starting_balance: startingBalance };
+            needsStartingBalanceSync = true;
+            return;
+          }
+          incomeCreates.push({
+            amount,
+            category,
+            subcategory,
+            account_id: account.id,
+            date,
+            notes,
+            cleared,
+            projected,
+            important,
+          });
+        } else if (type === 'transfer') {
+          if (isSystemStartingBalance) return;
+          const toAccountName = category;
+          const toAccount = accountsMap[toAccountName];
+          if (!toAccount) return;
+          transferCreates.push({
+            amount,
+            from_account_id: account.id,
+            to_account_id: toAccount.id,
+            date,
+            notes,
+            cleared,
+            projected,
+          });
+        }
+      });
+
+      const totalOps =
+        expenseCreates.length +
+        incomeCreates.length +
+        transferCreates.length +
+        accountUpdates.length;
+      let completed = 0;
+
+      const runBatch = async (items, entity, isUpdate = false) => {
+        const api = base44.entities[entity];
+        const canBulkCreate = !!api.createMany;
+        const canBulkUpdate = !!api.updateMany;
+        for (const chunk of chunkArray(items, 200)) {
+          if (isUpdate) {
+            if (canBulkUpdate) {
+              await api.updateMany(chunk);
+            } else {
+              await Promise.all(chunk.map((item) => api.update(item.id, item)));
+            }
+          } else {
+            if (canBulkCreate) {
+              await api.createMany(chunk);
+            } else {
+              await Promise.all(chunk.map((item) => api.create(item)));
+            }
+          }
+          completed += chunk.length;
+          setImportProgress(Math.round((completed / Math.max(totalOps, 1)) * 100));
+        }
+      };
+
+      await runBatch(accountUpdates, 'Account', true);
+      await runBatch(expenseCreates, 'Expense');
+      await runBatch(incomeCreates, 'Income');
+      await runBatch(transferCreates, 'Transfer');
+
+      imported =
+        expenseCreates.length +
+        incomeCreates.length +
+        transferCreates.length;
 
       if (needsStartingBalanceSync) {
         await ensureStartingBalanceTransactions(Object.values(accountsMap), queryClient);
@@ -1173,7 +1326,8 @@ export default function Settings() {
 
   const getEntityForType = (type) => {
     if (type === 'expense') return base44.entities.Expense;
-    return base44.entities.Income;
+    if (type === 'income') return base44.entities.Income;
+    return base44.entities.Transfer;
   };
 
   const handleApplyBulkAction = async () => {
@@ -1184,12 +1338,16 @@ export default function Settings() {
     if (bulkAction.type === 'delete') {
       const expensesKey = ['expenses'];
       const incomeKey = ['income'];
+      const transfersKey = ['transfers'];
       const prevExpenses = queryClient.getQueryData(expensesKey) || [];
       const prevIncome = queryClient.getQueryData(incomeKey) || [];
+      const prevTransfers = queryClient.getQueryData(transfersKey) || [];
       const expenseIds = new Set(filteredTransactions.filter((t) => t.type === 'expense').map((t) => t.id));
       const incomeIds = new Set(filteredTransactions.filter((t) => t.type === 'income').map((t) => t.id));
+      const transferIds = new Set(filteredTransactions.filter((t) => t.type === 'transfer').map((t) => t.id));
       queryClient.setQueryData(expensesKey, prevExpenses.filter((t) => !expenseIds.has(t.id)));
       queryClient.setQueryData(incomeKey, prevIncome.filter((t) => !incomeIds.has(t.id)));
+      queryClient.setQueryData(transfersKey, prevTransfers.filter((t) => !transferIds.has(t.id)));
 
       const timeoutId = setTimeout(async () => {
         pendingBulkDeleteRef.current = null;
@@ -1218,12 +1376,14 @@ export default function Settings() {
         });
         queryClient.invalidateQueries({ queryKey: ['expenses'] });
         queryClient.invalidateQueries({ queryKey: ['income'] });
+        queryClient.invalidateQueries({ queryKey: ['transfers'] });
       }, 8000);
 
       pendingBulkDeleteRef.current = {
         timeoutId,
         prevExpenses,
         prevIncome,
+        prevTransfers,
       };
 
       toast.success(`Deleted ${filteredTransactions.length} transactions`, {
@@ -1235,6 +1395,7 @@ export default function Settings() {
             clearTimeout(pending.timeoutId);
             queryClient.setQueryData(expensesKey, pending.prevExpenses);
             queryClient.setQueryData(incomeKey, pending.prevIncome);
+            queryClient.setQueryData(transfersKey, pending.prevTransfers);
             pendingBulkDeleteRef.current = null;
             toast.success('Bulk delete undone');
           },
@@ -1379,6 +1540,22 @@ export default function Settings() {
             <AlertDialogTitle>{confirmDialog.title}</AlertDialogTitle>
             <AlertDialogDescription>{confirmDialog.description}</AlertDialogDescription>
           </AlertDialogHeader>
+          {confirmDialog.showHardDeleteToggle && (
+            <div className="pt-2">
+              <label className="flex items-start gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900"
+                  checked={deleteAccountsHard}
+                  onChange={(e) => setDeleteAccountsHard(e.target.checked)}
+                />
+                <span>
+                  Also delete accounts that only have a Starting Balance (hard delete).
+                  This removes their Starting Balance transactions and resets total net worth to 0.
+                </span>
+              </label>
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-2">
             <AlertDialogCancel onClick={() => setConfirmDialog((prev) => ({ ...prev, open: false }))}>
               Cancel
@@ -1614,6 +1791,7 @@ export default function Settings() {
                       <SelectItem value="all">All</SelectItem>
                       <SelectItem value="expense">Expense</SelectItem>
                       <SelectItem value="income">Income</SelectItem>
+                      <SelectItem value="transfer">Transfer</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1682,39 +1860,76 @@ export default function Settings() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {['category', 'subcategory', 'notes'].map((field) => (
+                {['category', 'subcategory', 'notes'].map((field) => {
+                  const label =
+                    field === 'category'
+                      ? bulkFilters.type === 'transfer'
+                        ? 'From account match'
+                        : 'Category match'
+                      : field === 'subcategory'
+                      ? bulkFilters.type === 'transfer'
+                        ? 'To account match'
+                        : 'Subcategory match'
+                      : 'Notes match';
+                  return (
                   <div key={field} className="space-y-1">
-                    <Label className="capitalize">{field} match</Label>
-                    <Select
-                      value={bulkFilters.text[field].op}
-                      onValueChange={(value) =>
-                        setBulkFilters((prev) => ({
-                          ...prev,
-                          text: { ...prev.text, [field]: { ...prev.text[field], op: value } },
-                        }))
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="contains">Contains</SelectItem>
-                        <SelectItem value="starts">Starts with</SelectItem>
-                        <SelectItem value="ends">Ends with</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      value={bulkFilters.text[field].value}
-                      onChange={(e) =>
-                        setBulkFilters((prev) => ({
-                          ...prev,
-                          text: { ...prev.text, [field]: { ...prev.text[field], value: e.target.value } },
-                        }))
-                      }
-                      placeholder={`Filter ${field}`}
-                    />
+                    <Label>{label}</Label>
+                    {bulkFilters.type === 'transfer' && (field === 'category' || field === 'subcategory') ? (
+                      <Select
+                        value={bulkFilters.text[field].value}
+                        onValueChange={(value) =>
+                          setBulkFilters((prev) => ({
+                            ...prev,
+                            text: { ...prev.text, [field]: { ...prev.text[field], value } },
+                          }))
+                        }
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder={`Any ${field === 'category' ? 'from account' : 'to account'}`} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">Any</SelectItem>
+                          {accounts.map((acc) => (
+                            <SelectItem key={acc.id} value={acc.name}>
+                              {acc.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <>
+                        <Select
+                          value={bulkFilters.text[field].op}
+                          onValueChange={(value) =>
+                            setBulkFilters((prev) => ({
+                              ...prev,
+                              text: { ...prev.text, [field]: { ...prev.text[field], op: value } },
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="contains">Contains</SelectItem>
+                            <SelectItem value="starts">Starts with</SelectItem>
+                            <SelectItem value="ends">Ends with</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          value={bulkFilters.text[field].value}
+                          onChange={(e) =>
+                            setBulkFilters((prev) => ({
+                              ...prev,
+                              text: { ...prev.text, [field]: { ...prev.text[field], value: e.target.value } },
+                            }))
+                          }
+                          placeholder={label.replace(' match', '')}
+                        />
+                      </>
+                    )}
                   </div>
-                ))}
+                )})}
               </div>
 
             </div>
@@ -1728,15 +1943,22 @@ export default function Settings() {
                 {previewTransactions.length === 0 ? (
                   <p className="text-xs text-slate-400">No transactions match these filters.</p>
                 ) : (
-                  previewTransactions.map((tx) => (
-                    <div key={tx.id} className="flex items-center justify-between text-xs py-1">
-                      <div className="text-slate-600">
-                        {format(new Date(tx.date), 'yyyy-MM-dd')} • {tx.type} • {tx.category || '—'}
-                        {tx.subcategory ? ` / ${tx.subcategory}` : ''} {tx.notes ? `• ${tx.notes}` : ''}
+                  previewTransactions.map((tx) => {
+                    const fromAccount = accountNameById.get(tx.from_account_id) || '—';
+                    const toAccount = accountNameById.get(tx.to_account_id) || '—';
+                    return (
+                      <div key={tx.id} className="flex items-center justify-between text-xs py-1">
+                        <div className="text-slate-600">
+                          {format(new Date(tx.date), 'yyyy-MM-dd')} • {tx.type} •{' '}
+                          {tx.type === 'transfer'
+                            ? `${fromAccount} → ${toAccount}`
+                            : `${tx.category || '—'}${tx.subcategory ? ` / ${tx.subcategory}` : ''}`}{' '}
+                          {tx.notes ? `• ${tx.notes}` : ''}
+                        </div>
+                        <div className="tabular-nums text-slate-700">€{formatAmount(tx.amount)}</div>
                       </div>
-                      <div className="tabular-nums text-slate-700">€{formatAmount(tx.amount)}</div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>

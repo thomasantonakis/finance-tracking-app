@@ -212,7 +212,10 @@ export default function Accounts() {
   };
 
   const getDeleteReasons = (account) => {
-    const isStarting = (t) => (t.category || '').toLowerCase() === 'starting balance';
+    const isStarting = (t) => {
+      const category = (t.category || '').trim().toLowerCase();
+      return category === 'starting balance' || category === 'system - starting balance';
+    };
     const accExpenses = expenses.filter((e) => e.account_id === account.id);
     const accIncome = income.filter((i) => i.account_id === account.id);
     const hasRegularExpense = accExpenses.some((e) => !isStarting(e));
@@ -243,7 +246,10 @@ export default function Accounts() {
     }
 
     try {
-      const isStarting = (t) => (t.category || '').toLowerCase() === 'starting balance';
+      const isStarting = (t) => {
+        const category = (t.category || '').trim().toLowerCase();
+        return category === 'starting balance' || category === 'system - starting balance';
+      };
       const accExpenses = expenses.filter((e) => e.account_id === account.id && isStarting(e));
       const accIncome = income.filter((i) => i.account_id === account.id && isStarting(i));
       for (const item of accExpenses) {

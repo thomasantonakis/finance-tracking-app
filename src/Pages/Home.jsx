@@ -358,9 +358,10 @@ export default function Home() {
       ? (netWorthDelta === 0 ? 0 : (netWorthDelta > 0 ? Infinity : -Infinity))
       : (netWorthDelta / percentBase) * 100;
 
-  const isSystemStarting = (t) =>
-    (t.category || '').toLowerCase() === 'starting balance' ||
-    (t.category || '').toLowerCase() === 'system - starting balance';
+  const isSystemStarting = (t) => {
+    const category = (t.category || '').trim().toLowerCase();
+    return category === 'starting balance' || category === 'system - starting balance';
+  };
 
   const goalsThisMonth = useMemo(() => {
     const monthKey = format(today, 'yyyy-MM');

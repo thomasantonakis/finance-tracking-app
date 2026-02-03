@@ -22,8 +22,10 @@ export default function DayTransactions({
   const [duplicatingTransaction, setDuplicatingTransaction] = useState(null);
   const [duplicatingType, setDuplicatingType] = useState(null);
   const [openActionsId, setOpenActionsId] = useState(null);
-  const isStartingBalance = (t) =>
-    t?.type !== 'transfer' && (t?.category || '').toLowerCase() === 'starting balance';
+  const isStartingBalance = (t) => {
+    const category = (t?.category || '').trim().toLowerCase();
+    return t?.type !== 'transfer' && (category === 'starting balance' || category === 'system - starting balance');
+  };
 
   const getAccountName = (accountId) => {
     const account = accounts.find(a => a.id === accountId);

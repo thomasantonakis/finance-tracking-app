@@ -71,6 +71,20 @@ function makeEntity(entityName) {
       return row;
     },
 
+    async createMany(payloads) {
+      await sleep();
+      const rows = readAll(entityName);
+      const now = new Date().toISOString();
+      const created = payloads.map((payload) => ({
+        id: genId(),
+        created_at: now,
+        ...payload,
+      }));
+      rows.unshift(...created);
+      writeAll(entityName, rows);
+      return created;
+    },
+
     async update(id, patch) {
       await sleep();
       const rows = readAll(entityName);
@@ -81,10 +95,36 @@ function makeEntity(entityName) {
       return rows[idx];
     },
 
+    async updateMany(patches) {
+      await sleep();
+      const rows = readAll(entityName);
+      const now = new Date().toISOString();
+      const patchMap = new Map(patches.map((patch) => [patch.id, patch]));
+      const updated = [];
+      const next = rows.map((row) => {
+        const patch = patchMap.get(row.id);
+        if (!patch) return row;
+        const merged = { ...row, ...patch, updated_at: now };
+        updated.push(merged);
+        return merged;
+      });
+      writeAll(entityName, next);
+      return updated;
+    },
+
     async delete(id) {
       await sleep();
       const rows = readAll(entityName);
       const next = rows.filter((r) => r.id !== id);
+      writeAll(entityName, next);
+      return { ok: true };
+    },
+
+    async deleteMany(ids) {
+      await sleep();
+      const rows = readAll(entityName);
+      const idSet = new Set(ids);
+      const next = rows.filter((r) => !idSet.has(r.id));
       writeAll(entityName, next);
       return { ok: true };
     },

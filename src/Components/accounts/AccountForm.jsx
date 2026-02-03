@@ -43,7 +43,8 @@ const currencyOptions = [
 ];
 
 const STARTING_BALANCE_DATE = '1970-01-01';
-const STARTING_BALANCE_CATEGORY = 'starting balance';
+const STARTING_BALANCE_CATEGORY = 'SYSTEM - Starting Balance';
+const STARTING_BALANCE_CATEGORIES = new Set(['starting balance', 'system - starting balance']);
 
 const ensureStartingBalanceTransaction = async (accountId, rawAmount) => {
   const amount = Number(rawAmount) || 0;
@@ -55,16 +56,23 @@ const ensureStartingBalanceTransaction = async (accountId, rawAmount) => {
     base44.entities.Expense.list(),
   ]);
 
+  const isStarting = (t) => STARTING_BALANCE_CATEGORIES.has((t.category || '').trim().toLowerCase());
   const matchIncome = incomeList.find(
     (t) =>
       t.account_id === accountId &&
-      (t.category || '').toLowerCase() === STARTING_BALANCE_CATEGORY
+      isStarting(t)
   );
   const matchExpense = expenseList.find(
     (t) =>
       t.account_id === accountId &&
-      (t.category || '').toLowerCase() === STARTING_BALANCE_CATEGORY
+      isStarting(t)
   );
+
+  if (absAmount === 0) {
+    if (matchIncome) await base44.entities.Income.delete(matchIncome.id);
+    if (matchExpense) await base44.entities.Expense.delete(matchExpense.id);
+    return;
+  }
 
   if (isIncome) {
     if (matchExpense) {
@@ -73,6 +81,7 @@ const ensureStartingBalanceTransaction = async (accountId, rawAmount) => {
     if (matchIncome) {
       await base44.entities.Income.update(matchIncome.id, {
         amount: absAmount,
+        category: STARTING_BALANCE_CATEGORY,
         date: STARTING_BALANCE_DATE,
         cleared: true,
         projected: true,
@@ -95,6 +104,7 @@ const ensureStartingBalanceTransaction = async (accountId, rawAmount) => {
     if (matchExpense) {
       await base44.entities.Expense.update(matchExpense.id, {
         amount: absAmount,
+        category: STARTING_BALANCE_CATEGORY,
         date: STARTING_BALANCE_DATE,
         cleared: true,
         projected: true,

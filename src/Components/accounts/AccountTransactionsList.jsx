@@ -25,8 +25,10 @@ export default function AccountTransactionsList({
 
   const getCreatedStamp = (t) => t?.created_at ?? t?.created_date ?? t?.date;
   const getUpdatedStamp = (t) => t?.updated_at ?? t?.updated_date ?? getCreatedStamp(t);
-  const isStartingBalance = (t) =>
-    t?.type !== 'transfer' && (t?.category || '').toLowerCase() === 'starting balance';
+  const isStartingBalance = (t) => {
+    const category = (t?.category || '').trim().toLowerCase();
+    return t?.type !== 'transfer' && (category === 'starting balance' || category === 'system - starting balance');
+  };
   const safeFormatDate = (value) => {
     try {
       const d = parseISO(value);
