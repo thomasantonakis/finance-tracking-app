@@ -54,6 +54,10 @@ export default function Settings() {
     showHardDeleteToggle: false,
   });
   const [deleteAccountsHard, setDeleteAccountsHard] = useState(false);
+  const [sbConflictDialog, setSbConflictDialog] = useState({ open: false, conflicts: [] });
+  const [sbConflictResolution, setSbConflictResolution] = useState({});
+  const pendingImportRef = useRef(null);
+  const importInputRef = useRef(null);
   const [bulkFilters, setBulkFilters] = useState({
     type: 'all',
     dateFrom: '',
@@ -240,6 +244,13 @@ export default function Settings() {
   const [goalCurrency, setGoalCurrency] = useState(() => getMainCurrency() || 'EUR');
   const [fxProvider, setFxProviderState] = useState(() => getFxProvider());
   const [fxRefreshing, setFxRefreshing] = useState(false);
+
+  const normalizeKey = (value) => (value || '').trim().toLowerCase();
+  const capitalizeFirst = (value) => {
+    const trimmed = (value || '').trim();
+    if (!trimmed) return '';
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+  };
 
   const toggleGoalCategory = (name) => {
     setGoalCategories((prev) =>
@@ -633,8 +644,8 @@ export default function Settings() {
   const handleDownloadTemplate = () => {
     const rows = [
       ['Type', 'Date', 'Amount', 'Account', 'Category', 'Subcategory', 'Notes', 'Cleared', 'Projected', 'Important'],
-      ['expense', '2026-01-01', '50.12', 'Cash', 'food', 'groceries', 'Weekly shopping', 'yes', 'no', 'yes'],
-      ['income', '2026-01-01', '1234.56', 'Bank', 'salary', '', 'Monthly salary', 'yes', 'no', 'yes'],
+      ['expense', '2026-01-01', '50.12', 'Cash', 'Food', 'Groceries', 'Weekly shopping', 'yes', 'no', 'yes'],
+      ['income', '2026-01-01', '1234.56', 'Bank', 'Salary', 'Payroll', 'Monthly salary', 'yes', 'no', 'yes'],
       ['transfer', '2026-01-01', '200.75', 'Bank', 'Savings', '', 'Monthly savings', 'yes', 'no', 'no'],
       ['income', '1970-01-01', '1000.00', 'Bank', 'SYSTEM - Starting Balance', '', 'starting balance', 'yes', 'yes', 'no']
     ];
@@ -842,6 +853,283 @@ export default function Settings() {
     }
   };
 
+  const runImportData = async ({ data, fileName, attemptStamp, sbResolution = {} }) => {
+    const logs = [];
+
+    const currentAccounts = await base44.entities.Account.list();
+    const currentExpenseCategories = await base44.entities.ExpenseCategory.list();
+    const currentIncomeCategories = await base44.entities.IncomeCategory.list();
+      const currentIncome = await base44.entities.Income.list();
+      const currentExpenses = await base44.entities.Expense.list();
+
+    const accountsByNorm = {};
+    const accountNameByNorm = {};
+    currentAccounts.forEach((a) => {
+      const key = normalizeKey(a.name);
+      accountsByNorm[key] = a;
+      accountNameByNorm[key] = a.name;
+    });
+
+    const expenseCatsByNorm = {};
+    currentExpenseCategories.forEach((c) => {
+      expenseCatsByNorm[normalizeKey(c.name)] = c.name;
+    });
+    const incomeCatsByNorm = {};
+    currentIncomeCategories.forEach((c) => {
+      incomeCatsByNorm[normalizeKey(c.name)] = c.name;
+    });
+
+    const subcategoryByNorm = {};
+    [...currentExpenses, ...currentIncome].forEach((t) => {
+      const sub = (t.subcategory || '').trim();
+      if (!sub) return;
+      const key = normalizeKey(sub);
+      if (!subcategoryByNorm[key]) subcategoryByNorm[key] = sub;
+    });
+
+    let imported = 0;
+    let needsStartingBalanceSync = false;
+    const chunkArray = (arr, size) => {
+      const out = [];
+      for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+      return out;
+    };
+
+    const accountNames = new Set();
+    const expenseCatNames = new Set();
+    const incomeCatNames = new Set();
+
+    data.forEach((row) => {
+      const type = row[0]?.trim().toLowerCase();
+      const rawAccount = row[3]?.trim();
+      const rawCategory = row[4]?.trim();
+      if (rawAccount) {
+        const key = normalizeKey(rawAccount);
+        accountNames.add(key);
+        if (!accountNameByNorm[key]) accountNameByNorm[key] = capitalizeFirst(rawAccount);
+      }
+      if (type === 'transfer' && rawCategory) {
+        const key = normalizeKey(rawCategory);
+        accountNames.add(key);
+        if (!accountNameByNorm[key]) accountNameByNorm[key] = capitalizeFirst(rawCategory);
+      }
+      if (type === 'expense' && rawCategory && normalizeKey(rawCategory) !== 'system - starting balance') {
+        expenseCatNames.add(normalizeKey(rawCategory));
+      }
+      if (type === 'income' && rawCategory && normalizeKey(rawCategory) !== 'system - starting balance') {
+        incomeCatNames.add(normalizeKey(rawCategory));
+      }
+    });
+
+    const missingAccounts = Array.from(accountNames).filter((key) => !accountsByNorm[key]);
+    for (const chunk of chunkArray(missingAccounts, 50)) {
+      const created = await Promise.all(
+        chunk.map((key, idx) =>
+          base44.entities.Account.create({
+            name: accountNameByNorm[key] || key,
+            starting_balance: 0,
+            category: 'bank',
+            color: defaultColors[(Object.keys(accountsByNorm).length + idx) % defaultColors.length],
+            currency: 'EUR',
+          })
+        )
+      );
+      created.forEach((acc) => {
+        const key = normalizeKey(acc.name);
+        accountsByNorm[key] = acc;
+        accountNameByNorm[key] = acc.name;
+        logs.push(`Created new account "${acc.name}"`);
+      });
+    }
+
+    const missingExpenseCats = Array.from(expenseCatNames).filter(
+      (key) => !expenseCatsByNorm[key]
+    );
+    for (const chunk of chunkArray(missingExpenseCats, 50)) {
+      const created = await Promise.all(
+        chunk.map((key, idx) =>
+          base44.entities.ExpenseCategory.create({
+            name: capitalizeFirst(key),
+            color: defaultColors[(Object.keys(expenseCatsByNorm).length + idx) % defaultColors.length],
+            order: Object.keys(expenseCatsByNorm).length + idx,
+          })
+        )
+      );
+      created.forEach((cat) => {
+        expenseCatsByNorm[normalizeKey(cat.name)] = cat.name;
+        logs.push(`Created new expense category "${cat.name}"`);
+      });
+    }
+
+    const missingIncomeCats = Array.from(incomeCatNames).filter(
+      (key) => !incomeCatsByNorm[key]
+    );
+    for (const chunk of chunkArray(missingIncomeCats, 50)) {
+      const created = await Promise.all(
+        chunk.map((key, idx) =>
+          base44.entities.IncomeCategory.create({
+            name: capitalizeFirst(key),
+            color: defaultColors[(Object.keys(incomeCatsByNorm).length + idx) % defaultColors.length],
+            order: Object.keys(incomeCatsByNorm).length + idx,
+          })
+        )
+      );
+      created.forEach((cat) => {
+        incomeCatsByNorm[normalizeKey(cat.name)] = cat.name;
+        logs.push(`Created new income category "${cat.name}"`);
+      });
+    }
+
+    const expenseCreates = [];
+    const incomeCreates = [];
+    const transferCreates = [];
+    const accountUpdates = [];
+    let startingBalanceDetected = 0;
+
+    data.forEach((row) => {
+      const type = row[0]?.trim().toLowerCase();
+      const date = row[1]?.trim();
+      const amount = parseFloat(row[2]);
+      const rawAccount = row[3]?.trim();
+      const rawCategory = row[4]?.trim();
+      const rawSubcategory = row[5]?.trim();
+      const notes = row[6] || undefined;
+      const cleared = row[7]?.trim().toLowerCase() === 'yes';
+      const projected = row[8]?.trim().toLowerCase() === 'yes';
+      const important = row[9]?.trim().toLowerCase() === 'yes';
+
+      const account = accountsByNorm[normalizeKey(rawAccount)];
+      if (!account) return;
+
+      const isSystemStartingBalance = normalizeKey(rawCategory) === 'system - starting balance';
+      const subcategory = rawSubcategory
+        ? subcategoryByNorm[normalizeKey(rawSubcategory)] || capitalizeFirst(rawSubcategory)
+        : undefined;
+
+      if (type === 'expense') {
+        if (isSystemStartingBalance) {
+          startingBalanceDetected += 1;
+          const resolution = sbResolution[account.id];
+          if (resolution === 'keep') return;
+          const incomingSigned = -Math.abs(amount);
+          const existingSigned = Number(account.starting_balance) || 0;
+          const finalAmount =
+            resolution === 'merge' ? existingSigned + incomingSigned : incomingSigned;
+          accountUpdates.push({ id: account.id, starting_balance: finalAmount });
+          needsStartingBalanceSync = true;
+          return;
+        }
+        const categoryName = expenseCatsByNorm[normalizeKey(rawCategory)] || capitalizeFirst(rawCategory);
+        expenseCreates.push({
+          amount,
+          category: categoryName,
+          subcategory,
+          account_id: account.id,
+          date,
+          notes,
+          cleared,
+          projected,
+          important,
+        });
+      } else if (type === 'income') {
+        if (isSystemStartingBalance) {
+          startingBalanceDetected += 1;
+          const resolution = sbResolution[account.id];
+          if (resolution === 'keep') return;
+          const incomingSigned = Math.abs(amount);
+          const existingSigned = Number(account.starting_balance) || 0;
+          const finalAmount =
+            resolution === 'merge' ? existingSigned + incomingSigned : incomingSigned;
+          accountUpdates.push({ id: account.id, starting_balance: finalAmount });
+          needsStartingBalanceSync = true;
+          return;
+        }
+        const categoryName = incomeCatsByNorm[normalizeKey(rawCategory)] || capitalizeFirst(rawCategory);
+        incomeCreates.push({
+          amount,
+          category: categoryName,
+          subcategory,
+          account_id: account.id,
+          date,
+          notes,
+          cleared,
+          projected,
+          important,
+        });
+      } else if (type === 'transfer') {
+        if (isSystemStartingBalance) {
+          startingBalanceDetected += 1;
+          return;
+        }
+        const toAccount = accountsByNorm[normalizeKey(rawCategory)];
+        if (!toAccount) return;
+        transferCreates.push({
+          amount,
+          from_account_id: account.id,
+          to_account_id: toAccount.id,
+          date,
+          notes,
+          cleared,
+          projected,
+        });
+      }
+    });
+
+    const totalOps =
+      expenseCreates.length +
+      incomeCreates.length +
+      transferCreates.length +
+      accountUpdates.length;
+    let completed = 0;
+
+    const runBatch = async (items, entity, isUpdate = false) => {
+      const api = base44.entities[entity];
+      const canBulkCreate = !!api.createMany;
+      const canBulkUpdate = !!api.updateMany;
+      for (const chunk of chunkArray(items, 200)) {
+        if (isUpdate) {
+          if (canBulkUpdate) {
+            await api.updateMany(chunk);
+          } else {
+            await Promise.all(chunk.map((item) => api.update(item.id, item)));
+          }
+        } else {
+          if (canBulkCreate) {
+            await api.createMany(chunk);
+          } else {
+            await Promise.all(chunk.map((item) => api.create(item)));
+          }
+        }
+        completed += chunk.length;
+        setImportProgress(Math.round((completed / Math.max(totalOps, 1)) * 100));
+      }
+    };
+
+    await runBatch(accountUpdates, 'Account', true);
+    await runBatch(expenseCreates, 'Expense');
+    await runBatch(incomeCreates, 'Income');
+    await runBatch(transferCreates, 'Transfer');
+
+    imported = expenseCreates.length + incomeCreates.length + transferCreates.length;
+
+    if (needsStartingBalanceSync) {
+      const allAccounts = await base44.entities.Account.list();
+      await ensureStartingBalanceTransactions(allAccounts, queryClient);
+    }
+
+    const summary = [
+      `\n✅ Import completed: ${imported} transactions imported successfully`,
+      `• Rows processed: ${data.length}`,
+      `• Expenses: ${expenseCreates.length}`,
+      `• Income: ${incomeCreates.length}`,
+      `• Transfers: ${transferCreates.length}`,
+      `• Starting balances detected: ${startingBalanceDetected}`,
+    ];
+    setImportLogs([...logs, ...summary]);
+    queryClient.invalidateQueries();
+    toast.success(`Import completed: ${imported} transactions imported`);
+  };
+
   const handleImport = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -1019,247 +1307,111 @@ export default function Settings() {
         setImporting(false);
         return;
       }
-      const logs = [];
-
-      // Refresh accounts list
       const currentAccounts = await base44.entities.Account.list();
-      let accountsMap = {};
-      currentAccounts.forEach(a => accountsMap[a.name] = a);
-
-      // Get current categories
-      const currentExpenseCategories = await base44.entities.ExpenseCategory.list();
-      const currentIncomeCategories = await base44.entities.IncomeCategory.list();
-      let expenseCatsMap = {};
-      let incomeCatsMap = {};
-      currentExpenseCategories.forEach(c => expenseCatsMap[c.name] = c);
-      currentIncomeCategories.forEach(c => incomeCatsMap[c.name] = c);
-
-      let imported = 0;
-      let needsStartingBalanceSync = false;
-      const chunkArray = (arr, size) => {
-        const out = [];
-        for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-        return out;
-      };
-
-      const accountNames = new Set();
-      const expenseCatNames = new Set();
-      const incomeCatNames = new Set();
-
-      data.forEach((row) => {
-        const type = row[0]?.trim().toLowerCase();
-        const accountName = row[3]?.trim();
-        const category = row[4]?.trim();
-        if (accountName) accountNames.add(accountName);
-        if (type === 'transfer' && category) accountNames.add(category);
-        if (type === 'expense' && category && category.toLowerCase() !== 'system - starting balance') {
-          expenseCatNames.add(category);
-        }
-        if (type === 'income' && category && category.toLowerCase() !== 'system - starting balance') {
-          incomeCatNames.add(category);
-        }
+      const incomeList = await base44.entities.Income.list();
+      const expenseList = await base44.entities.Expense.list();
+      const accountsByNorm = {};
+      currentAccounts.forEach((acc) => {
+        accountsByNorm[normalizeKey(acc.name)] = acc;
+      });
+      const existingStartingByAccount = {};
+      const isStarting = (t) => normalizeKey(t.category) === 'system - starting balance' || normalizeKey(t.category) === 'starting balance';
+      incomeList.filter(isStarting).forEach((t) => {
+        existingStartingByAccount[t.account_id] = { ...t, type: 'income' };
+      });
+      expenseList.filter(isStarting).forEach((t) => {
+        existingStartingByAccount[t.account_id] = { ...t, type: 'expense' };
       });
 
-      const missingAccounts = Array.from(accountNames).filter((name) => !accountsMap[name]);
-      for (const chunk of chunkArray(missingAccounts, 50)) {
-        const created = await Promise.all(
-          chunk.map((name, idx) =>
-            base44.entities.Account.create({
-              name,
-              starting_balance: 0,
-              category: 'bank',
-              color: defaultColors[(Object.keys(accountsMap).length + idx) % defaultColors.length],
-              currency: 'EUR',
-            })
-          )
-        );
-        created.forEach((acc) => {
-          accountsMap[acc.name] = acc;
-          logs.push(`Created new account "${acc.name}"`);
-        });
-      }
-
-      const missingExpenseCats = Array.from(expenseCatNames).filter(
-        (name) => !Object.keys(expenseCatsMap).some((key) => key.toLowerCase() === name.toLowerCase())
-      );
-      for (const chunk of chunkArray(missingExpenseCats, 50)) {
-        const created = await Promise.all(
-          chunk.map((name, idx) =>
-            base44.entities.ExpenseCategory.create({
-              name,
-              color: defaultColors[(Object.keys(expenseCatsMap).length + idx) % defaultColors.length],
-              order: Object.keys(expenseCatsMap).length + idx,
-            })
-          )
-        );
-        created.forEach((cat) => {
-          expenseCatsMap[cat.name] = cat;
-          logs.push(`Created new expense category "${cat.name}"`);
-        });
-      }
-
-      const missingIncomeCats = Array.from(incomeCatNames).filter(
-        (name) => !Object.keys(incomeCatsMap).some((key) => key.toLowerCase() === name.toLowerCase())
-      );
-      for (const chunk of chunkArray(missingIncomeCats, 50)) {
-        const created = await Promise.all(
-          chunk.map((name, idx) =>
-            base44.entities.IncomeCategory.create({
-              name,
-              color: defaultColors[(Object.keys(incomeCatsMap).length + idx) % defaultColors.length],
-              order: Object.keys(incomeCatsMap).length + idx,
-            })
-          )
-        );
-        created.forEach((cat) => {
-          incomeCatsMap[cat.name] = cat;
-          logs.push(`Created new income category "${cat.name}"`);
-        });
-      }
-
-      const expenseCreates = [];
-      const incomeCreates = [];
-      const transferCreates = [];
-      const accountUpdates = [];
-      let startingBalanceDetected = 0;
-
+      const conflicts = [];
       data.forEach((row) => {
         const type = row[0]?.trim().toLowerCase();
         const date = row[1]?.trim();
         const amount = parseFloat(row[2]);
-        const accountName = row[3]?.trim();
-        const category = row[4]?.trim();
-        const subcategory = row[5]?.trim() || undefined;
-        const notes = row[6] || undefined;
-        const cleared = row[7]?.trim().toLowerCase() === 'yes';
-        const projected = row[8]?.trim().toLowerCase() === 'yes';
-        const important = row[9]?.trim().toLowerCase() === 'yes';
-        const isSystemStartingBalance =
-          (category || '').toLowerCase() === 'system - starting balance';
-
-        const account = accountsMap[accountName];
+        const rawAccount = row[3]?.trim();
+        const rawCategory = row[4]?.trim();
+        if (normalizeKey(rawCategory) !== 'system - starting balance') return;
+        const account = accountsByNorm[normalizeKey(rawAccount)];
         if (!account) return;
-
-        if (type === 'expense') {
-          if (isSystemStartingBalance) {
-            const startingBalance = -Math.abs(amount);
-            accountUpdates.push({ id: account.id, starting_balance: startingBalance });
-            accountsMap[accountName] = { ...account, starting_balance: startingBalance };
-            needsStartingBalanceSync = true;
-            startingBalanceDetected += 1;
-            return;
-          }
-          expenseCreates.push({
-            amount,
-            category,
-            subcategory,
-            account_id: account.id,
-            date,
-            notes,
-            cleared,
-            projected,
-            important,
-          });
-        } else if (type === 'income') {
-          if (isSystemStartingBalance) {
-            const startingBalance = Math.abs(amount);
-            accountUpdates.push({ id: account.id, starting_balance: startingBalance });
-            accountsMap[accountName] = { ...account, starting_balance: startingBalance };
-            needsStartingBalanceSync = true;
-            startingBalanceDetected += 1;
-            return;
-          }
-          incomeCreates.push({
-            amount,
-            category,
-            subcategory,
-            account_id: account.id,
-            date,
-            notes,
-            cleared,
-            projected,
-            important,
-          });
-        } else if (type === 'transfer') {
-          if (isSystemStartingBalance) {
-            startingBalanceDetected += 1;
-            return;
-          }
-          const toAccountName = category;
-          const toAccount = accountsMap[toAccountName];
-          if (!toAccount) return;
-          transferCreates.push({
-            amount,
-            from_account_id: account.id,
-            to_account_id: toAccount.id,
-            date,
-            notes,
-            cleared,
-            projected,
-          });
-        }
+        const existing = existingStartingByAccount[account.id];
+        if (!existing) return;
+        conflicts.push({
+          accountId: account.id,
+          accountName: account.name,
+          incomingAccountName: rawAccount,
+          existingType: existing.type,
+          existingAmount: existing.amount,
+          incomingAmount: amount,
+          incomingDate: date,
+          incomingType: type,
+        });
       });
 
-      const totalOps =
-        expenseCreates.length +
-        incomeCreates.length +
-        transferCreates.length +
-        accountUpdates.length;
-      let completed = 0;
-
-      const runBatch = async (items, entity, isUpdate = false) => {
-        const api = base44.entities[entity];
-        const canBulkCreate = !!api.createMany;
-        const canBulkUpdate = !!api.updateMany;
-        for (const chunk of chunkArray(items, 200)) {
-          if (isUpdate) {
-            if (canBulkUpdate) {
-              await api.updateMany(chunk);
-            } else {
-              await Promise.all(chunk.map((item) => api.update(item.id, item)));
-            }
-          } else {
-            if (canBulkCreate) {
-              await api.createMany(chunk);
-            } else {
-              await Promise.all(chunk.map((item) => api.create(item)));
-            }
-          }
-          completed += chunk.length;
-          setImportProgress(Math.round((completed / Math.max(totalOps, 1)) * 100));
-        }
-      };
-
-      await runBatch(accountUpdates, 'Account', true);
-      await runBatch(expenseCreates, 'Expense');
-      await runBatch(incomeCreates, 'Income');
-      await runBatch(transferCreates, 'Transfer');
-
-      imported =
-        expenseCreates.length +
-        incomeCreates.length +
-        transferCreates.length;
-
-      if (needsStartingBalanceSync) {
-        await ensureStartingBalanceTransactions(Object.values(accountsMap), queryClient);
+      if (conflicts.length > 0 && !pendingImportRef.current) {
+        const initialResolution = {};
+        conflicts.forEach((c) => {
+          initialResolution[c.accountId] = 'keep';
+        });
+        setSbConflictResolution(initialResolution);
+        setSbConflictDialog({ open: true, conflicts });
+        pendingImportRef.current = { data, fileName: file.name, attemptStamp };
+        setImporting(false);
+        return;
       }
 
-      const summary = [
-        `\n✅ Import completed: ${imported} transactions imported successfully`,
-        `• Expenses: ${expenseCreates.length}`,
-        `• Income: ${incomeCreates.length}`,
-        `• Transfers: ${transferCreates.length}`,
-        `• Starting balances detected: ${startingBalanceDetected}`,
-      ];
-      setImportLogs([...logs, ...summary]);
-      queryClient.invalidateQueries();
-      toast.success(`Import completed: ${imported} transactions imported`);
+      await runImportData({
+        data,
+        fileName: file.name,
+        attemptStamp,
+        sbResolution: sbConflictResolution,
+      });
       event.target.value = '';
+      if (importInputRef.current) importInputRef.current.value = '';
     } catch (error) {
       setImportLogs([`Fatal error: ${error.message}`]);
       toast.error('Failed to import data');
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleConfirmSbConflicts = async () => {
+    const pending = pendingImportRef.current;
+    if (!pending) {
+      setSbConflictDialog({ open: false, conflicts: [] });
+      return;
+    }
+    pendingImportRef.current = null;
+    setSbConflictDialog({ open: false, conflicts: [] });
+    setImporting(true);
+    try {
+      await runImportData({
+        data: pending.data,
+        fileName: pending.fileName,
+        attemptStamp: pending.attemptStamp,
+        sbResolution: sbConflictResolution,
+      });
+    } catch (error) {
+      setImportLogs([`Fatal error: ${error.message}`]);
+      toast.error('Failed to import data');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleCancelSbConflicts = () => {
+    const pending = pendingImportRef.current;
+    pendingImportRef.current = null;
+    setSbConflictDialog({ open: false, conflicts: [] });
+    setSbConflictResolution({});
+    setImporting(false);
+    setImportProgress(0);
+    if (importInputRef.current) importInputRef.current.value = '';
+    if (pending) {
+      setImportLogs([
+        `Import attempt: ${pending.fileName} @ ${pending.attemptStamp}`,
+        'Import cancelled by user.',
+      ]);
     }
   };
 
@@ -2260,6 +2412,112 @@ export default function Settings() {
           </div>
         </DialogContent>
       </Dialog>
+      <Dialog open={sbConflictDialog.open} onOpenChange={(open) => !open && handleCancelSbConflicts()}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Starting Balance Conflicts</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm text-slate-600">
+            <p>
+              The CSV contains Starting Balance rows for accounts that already have a Starting Balance.
+              Choose whether to keep the existing one or replace it with the incoming row.
+            </p>
+            <div className="max-h-64 overflow-auto border border-slate-200 rounded-lg">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2">Account</th>
+                    <th className="px-3 py-2">Existing (created)</th>
+                    <th className="px-3 py-2">Incoming</th>
+                    <th className="px-3 py-2">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sbConflictDialog.conflicts.map((c) => {
+                    const existingSigned = c.existingType === 'expense' ? -Math.abs(c.existingAmount) : Math.abs(c.existingAmount);
+                    const incomingSigned = c.incomingType === 'expense' ? -Math.abs(c.incomingAmount) : Math.abs(c.incomingAmount);
+                    const formatSigned = (value) => {
+                      const sign = value > 0 ? '+' : value < 0 ? '-' : '';
+                      const color = value > 0 ? 'text-green-600' : value < 0 ? 'text-red-600' : 'text-slate-500';
+                      return (
+                        <span className={`font-medium ${color}`}>
+                          {sign}{formatAmount(Math.abs(value))}
+                        </span>
+                      );
+                    };
+                    return (
+                    <tr key={c.accountId} className="border-t border-slate-100">
+                      <td className="px-3 py-2 font-medium text-slate-700">
+                        {c.accountName}
+                        {c.incomingAccountName && c.incomingAccountName !== c.accountName ? (
+                          <div className="text-[11px] text-slate-400">Incoming: {c.incomingAccountName}</div>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2 text-slate-600">
+                        Existing: {formatSigned(existingSigned)}
+                      </td>
+                      <td className="px-3 py-2 text-slate-600">
+                        Incoming: {formatSigned(incomingSigned)}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-col gap-2 text-xs">
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name={`sb-${c.accountId}`}
+                              checked={sbConflictResolution[c.accountId] === 'keep'}
+                              onChange={() =>
+                                setSbConflictResolution((prev) => ({ ...prev, [c.accountId]: 'keep' }))
+                              }
+                            />
+                            <span>
+                              Keep (existing) → {formatSigned(existingSigned)}
+                            </span>
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name={`sb-${c.accountId}`}
+                              checked={sbConflictResolution[c.accountId] === 'replace'}
+                              onChange={() =>
+                                setSbConflictResolution((prev) => ({ ...prev, [c.accountId]: 'replace' }))
+                              }
+                            />
+                            <span>
+                              Keep (incoming) → {formatSigned(incomingSigned)}
+                            </span>
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name={`sb-${c.accountId}`}
+                              checked={sbConflictResolution[c.accountId] === 'merge'}
+                              onChange={() =>
+                                setSbConflictResolution((prev) => ({ ...prev, [c.accountId]: 'merge' }))
+                              }
+                            />
+                            <span>
+                              Merge (sum) → {formatSigned(existingSigned + incomingSigned)}
+                            </span>
+                          </label>
+                        </div>
+                      </td>
+                    </tr>
+                  )})}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={handleCancelSbConflicts}>
+                Cancel
+              </Button>
+              <Button className="!bg-slate-900 !text-white !border-slate-900 hover:!bg-slate-800" onClick={handleConfirmSbConflicts}>
+                Confirm and import
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
       {(bulkResult.inProgress || bulkProcessing) && (
         <div className="fixed inset-0 z-[10000] cursor-wait bg-black/0 pointer-events-auto" />
       )}
@@ -2685,6 +2943,7 @@ export default function Settings() {
                     <p className="text-sm text-slate-500">Upload a CSV file to add transactions</p>
                   </div>
                   <input
+                    ref={importInputRef}
                     type="file"
                     accept=".csv"
                     onChange={handleImport}
