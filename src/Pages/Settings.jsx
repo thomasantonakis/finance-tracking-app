@@ -2560,9 +2560,8 @@ export default function Settings() {
           <div className="space-y-4">
             <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
               <div className="p-4 border-b border-slate-100">
-                <h2 className="font-semibold text-slate-900">Customize</h2>
+                <h2 className="font-semibold text-slate-900">Preferences</h2>
               </div>
-              
               <div className="divide-y divide-slate-100">
                 <div className="w-full flex items-center gap-3 p-4">
                   <div className="p-2 rounded-lg bg-slate-50">
@@ -2572,7 +2571,7 @@ export default function Settings() {
                     <p className="font-medium text-slate-900">Number Format</p>
                     <p className="text-sm text-slate-500">Choose thousands and decimal separators</p>
                   </div>
-                  <div className="w-64">
+                  <div className="ml-auto flex justify-end w-72">
                     <Select value={numberFormat} onValueChange={setNumberFormatState}>
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Select number format" />
@@ -2596,7 +2595,7 @@ export default function Settings() {
                     <p className="font-medium text-slate-900">Exchange Rates</p>
                     <p className="text-sm text-slate-500">Pick provider, then refresh rates</p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="ml-auto flex items-center justify-end gap-2 w-[420px]">
                     <Select
                       value={fxProvider}
                       onValueChange={(value) => {
@@ -2629,7 +2628,7 @@ export default function Settings() {
                     <p className="font-medium text-slate-900">Main Currency</p>
                     <p className="text-sm text-slate-500">Used for charts + rollups</p>
                   </div>
-                  <div className="w-64">
+                  <div className="ml-auto flex justify-end w-72">
                     <Select
                       value={mainCurrency}
                       onValueChange={(value) => {
@@ -2657,6 +2656,14 @@ export default function Settings() {
                     </Select>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+              <div className="p-4 border-b border-slate-100">
+                <h2 className="font-semibold text-slate-900">Budgets & Goals</h2>
+              </div>
+              <div className="divide-y divide-slate-100">
                 <button
                   onClick={() => setShowGoals((prev) => !prev)}
                   className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors"
@@ -2806,12 +2813,20 @@ export default function Settings() {
                     )}
                   </div>
                 )}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+              <div className="p-4 border-b border-slate-100">
+                <h2 className="font-semibold text-slate-900">Categories</h2>
+              </div>
+              <div className="divide-y divide-slate-100">
                 <button
                   onClick={() => setShowCustomize(!showCustomize)}
                   className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors"
                 >
-                  <div className="p-2 rounded-lg bg-purple-50">
-                    <Palette className="w-5 h-5 text-purple-600" />
+                  <div className="p-2 rounded-lg bg-slate-100">
+                    <Palette className="w-5 h-5 text-slate-700" />
                   </div>
                   <div className="flex-1 text-left">
                     <p className="font-medium text-slate-900">Manage Categories</p>
@@ -2851,6 +2866,41 @@ export default function Settings() {
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+              <div className="p-4 border-b border-slate-100">
+                <h2 className="font-semibold text-slate-900">Automation</h2>
+              </div>
+              <div className="divide-y divide-slate-100">
+                <button
+                  onClick={() => setShowRecurringModal(true)}
+                  className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="p-2 rounded-lg bg-slate-100">
+                    <Palette className="w-5 h-5 text-slate-700" />
+                  </div>
+                  <div className="flex-1 text-left">
+                    <p className="font-medium text-slate-900">Recurring Transactions</p>
+                    <p className="text-sm text-slate-500">Create bills or regular income with rules</p>
+                  </div>
+                </button>
+                <div className="p-4 text-sm text-slate-600">
+                  {recurringRules.length === 0 ? (
+                    <span>No recurring rules yet.</span>
+                  ) : (
+                    <span>{recurringRules.length} rule(s) configured.</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+              <div className="p-4 border-b border-slate-100">
+                <h2 className="font-semibold text-slate-900">Advanced Tools</h2>
+              </div>
+              <div className="divide-y divide-slate-100">
                 <button
                   onClick={() => setShowBulkUpdater(true)}
                   className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors"
@@ -2863,18 +2913,6 @@ export default function Settings() {
                     <p className="text-sm text-slate-500">Filter and apply changes to multiple transactions</p>
                   </div>
                 </button>
-                <button
-                  onClick={() => setShowRecurringModal(true)}
-                  className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors"
-                >
-                  <div className="p-2 rounded-lg bg-purple-50">
-                    <Palette className="w-5 h-5 text-purple-600" />
-                  </div>
-                  <div className="flex-1 text-left">
-                    <p className="font-medium text-slate-900">Recurring Transactions</p>
-                    <p className="text-sm text-slate-500">Create bills or regular income with rules</p>
-                  </div>
-                </button>
               </div>
             </div>
 
@@ -2882,21 +2920,7 @@ export default function Settings() {
               <div className="p-4 border-b border-slate-100">
                 <h2 className="font-semibold text-slate-900">Data Management</h2>
               </div>
-              
               <div className="divide-y divide-slate-100">
-                <button
-                  onClick={handleDownloadTemplate}
-                  className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors"
-                  disabled={isProcessing}
-                >
-                  <div className="p-2 rounded-lg bg-green-50">
-                    <Download className="w-5 h-5 text-green-600" />
-                  </div>
-                  <div className="flex-1 text-left">
-                    <p className="font-medium text-slate-900">Download Import Template</p>
-                    <p className="text-sm text-slate-500">Get a CSV template with example data</p>
-                  </div>
-                </button>
                 <div className="p-4">
                   <button
                     type="button"
@@ -2951,18 +2975,17 @@ export default function Settings() {
                     </div>
                   )}
                 </div>
-
                 <button
-                  onClick={handleExport}
+                  onClick={handleDownloadTemplate}
                   className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors"
                   disabled={isProcessing}
                 >
-                  <div className="p-2 rounded-lg bg-blue-50">
-                    <Download className="w-5 h-5 text-blue-600" />
+                  <div className="p-2 rounded-lg bg-green-50">
+                    <Download className="w-5 h-5 text-green-600" />
                   </div>
                   <div className="flex-1 text-left">
-                    <p className="font-medium text-slate-900">Export Data</p>
-                    <p className="text-sm text-slate-500">Download all your financial data as CSV</p>
+                    <p className="font-medium text-slate-900">Download Import Template</p>
+                    <p className="text-sm text-slate-500">Get a CSV template with example data</p>
                   </div>
                 </button>
 
@@ -2984,6 +3007,20 @@ export default function Settings() {
                   />
                 </label>
 
+                <button
+                  onClick={handleExport}
+                  className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors"
+                  disabled={isProcessing}
+                >
+                  <div className="p-2 rounded-lg bg-blue-50">
+                    <Download className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div className="flex-1 text-left">
+                    <p className="font-medium text-slate-900">Export Data</p>
+                    <p className="text-sm text-slate-500">Download all your financial data as CSV</p>
+                  </div>
+                </button>
+
                 {importLogs.length > 0 && (
                   <div className="p-4 bg-slate-50">
                     <p className="font-medium text-slate-900 mb-2 text-sm">Import Log:</p>
@@ -2994,8 +3031,15 @@ export default function Settings() {
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
 
-
+            <div className="bg-white rounded-2xl border border-red-100 overflow-hidden">
+              <div className="p-4 border-b border-red-100">
+                <h2 className="font-semibold text-red-700">Danger Zone</h2>
+                <p className="text-sm text-red-500">These actions are permanent.</p>
+              </div>
+              <div className="divide-y divide-red-100">
                 <button
                   onClick={handleDeleteAllData}
                   className="w-full flex items-center gap-3 p-4 hover:bg-red-50 transition-colors text-left"
@@ -3030,7 +3074,6 @@ export default function Settings() {
               <div className="p-4 border-b border-slate-100">
                 <h2 className="font-semibold text-slate-900">Account</h2>
               </div>
-              
               <div className="divide-y divide-slate-100">
                 <button
                   onClick={handleLogout}

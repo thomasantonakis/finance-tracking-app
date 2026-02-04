@@ -294,6 +294,7 @@ export default function Accounts() {
   const totalBalance = displayAccounts.reduce((sum, acc) => sum + getAccountBalance(acc.id), 0);
   const currencySet = new Set(displayAccounts.map((acc) => acc.currency || 'EUR'));
   const totalCurrency = currencySet.size === 1 ? Array.from(currencySet)[0] : null;
+  const showPerCurrencyRollup = currencySet.size > 1;
   const mainCurrency = getMainCurrency() || 'EUR';
   const [fxRates, setFxRates] = useState(() => readFxRates(mainCurrency));
 
@@ -519,7 +520,7 @@ export default function Accounts() {
                 {formatCurrency(totalInMainCurrency, mainCurrency)}
               </p>
             </div>
-            {Object.keys(totalsByCurrency).length > 0 && (
+            {showPerCurrencyRollup && Object.keys(totalsByCurrency).length > 0 && (
               <div className="mt-3 border-t border-slate-100 pt-3 space-y-1">
                 {totalsSorted.map(({ code, amount, rate, mainEquivalent }) => (
                   <div key={code} className="flex items-center justify-between text-sm text-slate-600">
