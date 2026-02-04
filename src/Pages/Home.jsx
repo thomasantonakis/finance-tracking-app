@@ -35,6 +35,7 @@ export default function Home() {
   const [dayKey, setDayKey] = useState(() => format(new Date(), 'yyyy-MM-dd'));
   const [selectedPeriod, setSelectedPeriod] = useSessionState('home.selectedPeriod', 'last30');
   const [showSearch, setShowSearch] = useState(false);
+  const searchInputRef = useRef(null);
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [editingType, setEditingType] = useState(null);
   const [duplicatingTransaction, setDuplicatingTransaction] = useState(null);
@@ -429,6 +430,15 @@ export default function Home() {
     });
   }, [showSearch]);
 
+  useEffect(() => {
+    if (!showSearch) return;
+    const id = requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select?.();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [showSearch]);
+
   const hasSearchCriteria = Boolean(
     searchAppliedFilters.query.trim() ||
     searchAppliedFilters.dateFrom ||
@@ -578,15 +588,23 @@ export default function Home() {
           <DialogHeader>
             <DialogTitle>Search Transactions</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 max-h-[70vh] overflow-auto pr-1">
+          <form
+            className="space-y-4 max-h-[70vh] overflow-auto pr-1"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setSearchAppliedFilters(searchFilters);
+            }}
+          >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <Input
+                ref={searchInputRef}
                 placeholder="Search category, subcategory, notes..."
                 value={searchFilters.query}
                 onChange={(e) => setSearchFilters((prev) => ({ ...prev, query: e.target.value }))}
               />
               <div className="flex items-center justify-end gap-2 md:justify-start">
                 <Button
+                  type="button"
                   variant="outline"
                   onClick={() => {
                     setSearchFilters({
@@ -607,7 +625,7 @@ export default function Home() {
                 >
                   Clear
                 </Button>
-                <Button onClick={() => setSearchAppliedFilters(searchFilters)}>Search</Button>
+                <Button type="submit">Search</Button>
               </div>
               <div className="grid grid-cols-2 gap-2 md:col-span-2">
                 <Input
@@ -742,7 +760,7 @@ export default function Home() {
                 <p className="text-sm text-slate-400">No transactions match your filters.</p>
               )}
             </div>
-          </div>
+          </form>
         </DialogContent>
       </Dialog>
 
