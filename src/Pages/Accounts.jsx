@@ -93,11 +93,11 @@ export default function Accounts() {
     
     const transfersOut = transfers
       .filter(t => t.from_account_id === accountId)
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
+      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
     
     const transfersIn = transfers
       .filter(t => t.to_account_id === accountId)
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
+      .reduce((sum, t) => sum + (Number(t.amount_to) || Number(t.amount) || 0), 0);
     
     return accountIncome - accountExpenses - transfersOut + transfersIn;
   };

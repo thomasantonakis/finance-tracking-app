@@ -19,6 +19,7 @@ import { sortAccountsByOrder, getCurrencySymbol, getMainCurrency, readFxRates } 
 
 export default function TransferForm({ onSuccess, onCancel, initialData, initialDate, onAfterCreate }) {
   const [loading, setLoading] = useState(false);
+  const [amountToEdited, setAmountToEdited] = useState(false);
   const [formData, setFormData] = useState(() => ({
     from_account_id: initialData?.from_account_id || '',
     to_account_id: initialData?.to_account_id || '',
@@ -43,6 +44,7 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
       cleared: initialData?.cleared ?? true,
       projected: initialData?.projected ?? false
     });
+    setAmountToEdited(!!initialData?.amount_to);
   }, [initialData, initialDate]);
 
   const { data: accounts = [] } = useQuery({
@@ -79,10 +81,20 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
   const impliedRate = currencyMismatch && fromAmount > 0 && toAmount > 0 ? toAmount / fromAmount : null;
   const fxDiff =
     expectedRate && impliedRate ? Math.abs(impliedRate / expectedRate - 1) : null;
-  const fxWarning =
-    currencyMismatch && fxDiff !== null && fxDiff > 0.05
-      ? `⚠️ Implied FX differs by ${(fxDiff * 100).toFixed(1)}% vs yesterday's rate`
+  const fxMessage =
+    currencyMismatch && expectedRate && fromAmount > 0
+      ? `Implied FX: ${impliedRate ? impliedRate.toFixed(4) : '—'} (expected ${expectedRate.toFixed(4)}${fxDiff !== null ? `, ${(fxDiff * 100).toFixed(1)}%` : ''})`
       : null;
+  const fxWarning = fxDiff !== null && fxDiff > 0.05;
+
+  React.useEffect(() => {
+    if (!currencyMismatch || !expectedRate || !formData.amount) return;
+    if (amountToEdited) return;
+    const amountValue = parseFloat(formData.amount);
+    if (!Number.isFinite(amountValue)) return;
+    const computed = amountValue * expectedRate;
+    setFormData((prev) => ({ ...prev, amount_to: computed.toFixed(2) }));
+  }, [currencyMismatch, expectedRate, formData.amount, amountToEdited]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -218,7 +230,10 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
               placeholder="0.00"
               className="pl-7 text-lg"
               value={formData.amount}
-              onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+              onChange={(e) => {
+                setAmountToEdited(false);
+                setFormData({ ...formData, amount: e.target.value });
+              }}
               required
             />
           </div>
@@ -235,7 +250,10 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
                 placeholder="0.00"
                 className="pl-7 text-lg"
                 value={formData.amount_to}
-                onChange={(e) => setFormData({ ...formData, amount_to: e.target.value })}
+                onChange={(e) => {
+                  setAmountToEdited(true);
+                  setFormData({ ...formData, amount_to: e.target.value });
+                }}
                 required
               />
             </div>
@@ -304,8 +322,10 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
             Source and destination accounts must be different.
           </div>
         )}
-        {fxWarning && (
-          <div className="text-sm text-red-600">{fxWarning}</div>
+        {fxMessage && (
+          <div className={`text-sm ${fxWarning ? 'text-red-600' : 'text-slate-400'}`}>
+            {fxMessage}
+          </div>
         )}
         <div className="flex gap-3">
           <Button

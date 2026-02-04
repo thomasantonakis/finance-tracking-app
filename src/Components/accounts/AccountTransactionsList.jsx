@@ -93,10 +93,12 @@ export default function AccountTransactionsList({
     } else if (t.type === 'expense') {
       runningBalance -= t.amount;
     } else if (t.type === 'transfer') {
+      const outAmount = Number(t.amount) || 0;
+      const inAmount = Number(t.amount_to) || outAmount;
       if (t.from_account_id === selectedAccount) {
-        runningBalance -= t.amount;
+        runningBalance -= outAmount;
       } else {
-        runningBalance += t.amount;
+        runningBalance += inAmount;
       }
     }
     runningBalanceMap[t.id] = runningBalance;

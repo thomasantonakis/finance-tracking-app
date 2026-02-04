@@ -266,8 +266,10 @@ export default function Charts() {
         const keyDay = format(date, 'yyyy-MM-dd');
         const keyMonth = format(date, 'yyyy-MM');
         let net = 0;
-        if (t.to_account_id === selectedAccount) net = t.amount;
-        if (t.from_account_id === selectedAccount) net = -t.amount;
+        const outAmount = Number(t.amount) || 0;
+        const inAmount = Number(t.amount_to) || outAmount;
+        if (t.to_account_id === selectedAccount) net = inAmount;
+        if (t.from_account_id === selectedAccount) net = -outAmount;
         if (net !== 0) {
           addToMap(daily, keyDay, {
             income: 0,

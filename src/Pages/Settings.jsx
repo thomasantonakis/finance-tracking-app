@@ -552,9 +552,9 @@ export default function Settings() {
 
   const handleExport = () => {
     // Combine all transactions into CSV format
-    const rows = [
-      ['Type', 'Date', 'Amount', 'Account', 'Category', 'Subcategory', 'Notes', 'Cleared', 'Projected', 'Important']
-    ];
+      const rows = [
+        ['Type', 'Date', 'Amount', 'Account', 'Category', 'Subcategory', 'Notes', 'Cleared', 'Projected', 'Important', 'crossCurrencyAmount']
+      ];
 
   const isStartingBalance = (t) => {
     const category = (t.category || '').trim().toLowerCase();
@@ -574,7 +574,8 @@ export default function Settings() {
         e.notes || '',
         e.cleared ? 'yes' : 'no',
         e.projected ? 'yes' : 'no',
-        e.important ? 'yes' : 'no'
+        e.important ? 'yes' : 'no',
+        ''
       ]);
     });
 
@@ -591,7 +592,8 @@ export default function Settings() {
         i.notes || '',
         i.cleared ? 'yes' : 'no',
         i.projected ? 'yes' : 'no',
-        i.important ? 'yes' : 'no'
+        i.important ? 'yes' : 'no',
+        ''
       ]);
     });
 
@@ -608,7 +610,8 @@ export default function Settings() {
         t.notes || '',
         t.cleared ? 'yes' : 'no',
         t.projected ? 'yes' : 'no',
-        'no'
+        'no',
+        t.amount_to ?? t.amount
       ]);
     });
 
@@ -626,11 +629,16 @@ export default function Settings() {
         'starting balance',
         'yes',
         'yes',
-        'no'
+        'no',
+        ''
       ]);
     });
 
-    const csv = rows.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+    const csvEscape = (value) => {
+      const text = value === null || value === undefined ? '' : String(value);
+      return `"${text.replace(/"/g, '""')}"`;
+    };
+    const csv = rows.map(row => row.map(csvEscape).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -643,14 +651,18 @@ export default function Settings() {
 
   const handleDownloadTemplate = () => {
     const rows = [
-      ['Type', 'Date', 'Amount', 'Account', 'Category', 'Subcategory', 'Notes', 'Cleared', 'Projected', 'Important'],
-      ['expense', '2026-01-01', '50.12', 'Cash', 'Food', 'Groceries', 'Weekly shopping', 'yes', 'no', 'yes'],
-      ['income', '2026-01-01', '1234.56', 'Bank', 'Salary', 'Payroll', 'Monthly salary', 'yes', 'no', 'yes'],
-      ['transfer', '2026-01-01', '200.75', 'Bank', 'Savings', '', 'Monthly savings', 'yes', 'no', 'no'],
-      ['income', '1970-01-01', '1000.00', 'Bank', 'SYSTEM - Starting Balance', '', 'starting balance', 'yes', 'yes', 'no']
+      ['Type', 'Date', 'Amount', 'Account', 'Category', 'Subcategory', 'Notes', 'Cleared', 'Projected', 'Important', 'crossCurrencyAmount'],
+      ['expense', '2026-01-01', '50.12', 'Cash', 'Food', 'Groceries', 'Weekly shopping', 'yes', 'no', 'yes', ''],
+      ['income', '2026-01-01', '1234.56', 'Bank', 'Salary', 'Payroll', 'Monthly salary', 'yes', 'no', 'yes', ''],
+      ['transfer', '2026-01-01', '200.75', 'Bank', 'Savings', '', 'Monthly savings', 'yes', 'no', 'no', '200.75'],
+      ['income', '1970-01-01', '1000.00', 'Bank', 'SYSTEM - Starting Balance', '', 'starting balance', 'yes', 'yes', 'no', '']
     ];
 
-    const csv = rows.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+    const csvEscape = (value) => {
+      const text = value === null || value === undefined ? '' : String(value);
+      return `"${text.replace(/"/g, '""')}"`;
+    };
+    const csv = rows.map(row => row.map(csvEscape).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -899,16 +911,16 @@ export default function Settings() {
     const expenseCatNames = new Set();
     const incomeCatNames = new Set();
 
-    data.forEach((row) => {
-      const type = row[0]?.trim().toLowerCase();
-      const rawAccount = row[3]?.trim();
-      const rawCategory = row[4]?.trim();
-      if (rawAccount) {
-        const key = normalizeKey(rawAccount);
-        accountNames.add(key);
-        if (!accountNameByNorm[key]) accountNameByNorm[key] = capitalizeFirst(rawAccount);
-      }
-      if (type === 'transfer' && rawCategory) {
+      data.forEach((row) => {
+        const type = row[0]?.trim().toLowerCase();
+        const rawAccount = row[3]?.trim();
+        const rawCategory = row[4]?.trim();
+        if (rawAccount) {
+          const key = normalizeKey(rawAccount);
+          accountNames.add(key);
+          if (!accountNameByNorm[key]) accountNameByNorm[key] = capitalizeFirst(rawAccount);
+        }
+        if (type === 'transfer' && rawCategory) {
         const key = normalizeKey(rawCategory);
         accountNames.add(key);
         if (!accountNameByNorm[key]) accountNameByNorm[key] = capitalizeFirst(rawCategory);
@@ -986,17 +998,19 @@ export default function Settings() {
     const accountUpdates = [];
     let startingBalanceDetected = 0;
 
-    data.forEach((row) => {
-      const type = row[0]?.trim().toLowerCase();
-      const date = row[1]?.trim();
-      const amount = parseFloat(row[2]);
-      const rawAccount = row[3]?.trim();
-      const rawCategory = row[4]?.trim();
-      const rawSubcategory = row[5]?.trim();
-      const notes = row[6] || undefined;
-      const cleared = row[7]?.trim().toLowerCase() === 'yes';
-      const projected = row[8]?.trim().toLowerCase() === 'yes';
-      const important = row[9]?.trim().toLowerCase() === 'yes';
+      data.forEach((row) => {
+        const type = row[0]?.trim().toLowerCase();
+        const date = row[1]?.trim();
+        const amount = parseFloat(row[2]);
+        const rawAccount = row[3]?.trim();
+        const rawCategory = row[4]?.trim();
+        const rawSubcategory = row[5]?.trim();
+        const notes = row[6] ? row[6] : undefined;
+        const cleared = row[7]?.trim().toLowerCase() === 'yes';
+        const projected = row[8]?.trim().toLowerCase() === 'yes';
+        const important = row[9]?.trim().toLowerCase() === 'yes';
+        const crossAmountRaw = (row[10] || '').trim();
+        const crossAmount = crossAmountRaw ? parseFloat(crossAmountRaw) : undefined;
 
       const account = accountsByNorm[normalizeKey(rawAccount)];
       if (!account) return;
@@ -1065,6 +1079,7 @@ export default function Settings() {
         if (!toAccount) return;
         transferCreates.push({
           amount,
+          amount_to: crossAmount ?? amount,
           from_account_id: account.id,
           to_account_id: toAccount.id,
           date,
@@ -1167,11 +1182,11 @@ export default function Settings() {
           inQuotes = !inQuotes;
         } else if (char === ',' && !inQuotes) {
           // End of cell
-          currentRow.push(currentCell.trim());
+          currentRow.push(currentCell);
           currentCell = '';
         } else if (char === '\n' && !inQuotes) {
           // End of row
-          currentRow.push(currentCell.trim());
+          currentRow.push(currentCell);
           if (currentRow.some(cell => cell.length > 0)) {
             rows.push(currentRow);
           }
@@ -1179,7 +1194,7 @@ export default function Settings() {
           currentCell = '';
         } else if (char === '\r' && nextChar === '\n' && !inQuotes) {
           // Windows line ending
-          currentRow.push(currentCell.trim());
+          currentRow.push(currentCell);
           if (currentRow.some(cell => cell.length > 0)) {
             rows.push(currentRow);
           }
@@ -1194,7 +1209,7 @@ export default function Settings() {
       
       // Don't forget the last cell and row
       if (currentCell.length > 0 || currentRow.length > 0) {
-        currentRow.push(currentCell.trim());
+        currentRow.push(currentCell);
         if (currentRow.some(cell => cell.length > 0)) {
           rows.push(currentRow);
         }
@@ -1207,16 +1222,19 @@ export default function Settings() {
         return;
       }
 
-      const expectedHeaders = ['Type', 'Date', 'Amount', 'Account', 'Category', 'Subcategory', 'Notes', 'Cleared', 'Projected', 'Important'];
+      const expectedHeaders = ['Type', 'Date', 'Amount', 'Account', 'Category', 'Subcategory', 'Notes', 'Cleared', 'Projected', 'Important', 'crossCurrencyAmount'];
+      const expectedHeadersShort = ['Type', 'Date', 'Amount', 'Account', 'Category', 'Subcategory', 'Notes', 'Cleared', 'Projected', 'Important'];
       const headerRow = rows[0].map((cell) => (cell || '').trim());
       const headerMatches =
-        headerRow.length === expectedHeaders.length &&
-        expectedHeaders.every((header, idx) => headerRow[idx] === header);
+        (headerRow.length === expectedHeaders.length &&
+          expectedHeaders.every((header, idx) => headerRow[idx] === header)) ||
+        (headerRow.length === expectedHeadersShort.length &&
+          expectedHeadersShort.every((header, idx) => headerRow[idx] === header));
       if (!headerMatches) {
         setImportLogs([
           `Import attempt: ${file.name} @ ${attemptStamp}`,
           'Error: CSV headers do not match the template.',
-          `Expected: ${expectedHeaders.join(', ')}`,
+          `Expected: ${expectedHeaders.join(', ')} (or without the final column)`,
           `Found: ${headerRow.join(', ')}`,
         ]);
         toast.error('Invalid CSV headers');
@@ -1248,6 +1266,7 @@ export default function Settings() {
         const accountName = (row[3] || '').trim();
         const category = (row[4] || '').trim();
         const subcategory = (row[5] || '').trim();
+        const crossAmountStr = (row[10] || '').trim();
         const cleared = (row[7] || '').trim().toLowerCase();
         const projected = (row[8] || '').trim().toLowerCase();
         const important = (row[9] || '').trim().toLowerCase();
@@ -1264,6 +1283,13 @@ export default function Settings() {
           validationErrors.push(`Row ${rowNumber}: Invalid amount "${amountStr}" (use digits only, optional decimal with up to 2 digits, and "." as the decimal separator)`);
         } else if (Number(amountStr) <= 0) {
           validationErrors.push(`Row ${rowNumber}: Amount must be greater than 0`);
+        }
+        if (crossAmountStr) {
+          if (!amountPattern.test(crossAmountStr)) {
+            validationErrors.push(`Row ${rowNumber}: Invalid crossCurrencyAmount "${crossAmountStr}" (use digits only, optional decimal with up to 2 digits, and "." as the decimal separator)`);
+          } else if (Number(crossAmountStr) <= 0) {
+            validationErrors.push(`Row ${rowNumber}: Cross currency amount must be greater than 0`);
+          }
         }
         if (!accountName) {
           validationErrors.push(`Row ${rowNumber}: Account is required`);
@@ -1286,6 +1312,9 @@ export default function Settings() {
 
         if (type === 'transfer' && !category) {
           validationErrors.push(`Row ${rowNumber}: Transfer requires Category as destination account`);
+        }
+        if (crossAmountStr && type !== 'transfer') {
+          validationErrors.push(`Row ${rowNumber}: Cross currency amount is only valid for transfers`);
         }
         if (isSystemStartingBalance) {
           if (type === 'transfer') {
@@ -2915,6 +2944,9 @@ export default function Settings() {
                       </p>
                       <p>
                         <span className="font-medium">Transfers</span>: set <code className="px-1">Account</code> as the <em>from</em> account and <code className="px-1">Category</code> as the <em>to</em> account.
+                      </p>
+                      <p>
+                        <span className="font-medium">crossCurrencyAmount</span>: optional for transfers only. If provided, this is the amount credited to the <em>to</em> account. It must follow the same numeric rules as <code className="px-1">Amount</code>.
                       </p>
                     </div>
                   )}

@@ -324,8 +324,10 @@ export default function Home() {
     });
     transfers.forEach((t) => {
       if (new Date(t.date) > endDate) return;
-      if (t.from_account_id === accountId) balance -= Number(t.amount) || 0;
-      if (t.to_account_id === accountId) balance += Number(t.amount) || 0;
+      const outAmount = Number(t.amount) || 0;
+      const inAmount = Number(t.amount_to) || outAmount;
+      if (t.from_account_id === accountId) balance -= outAmount;
+      if (t.to_account_id === accountId) balance += inAmount;
     });
     return balance;
   };
