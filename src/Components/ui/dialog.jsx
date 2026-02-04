@@ -28,7 +28,9 @@ export function Dialog({ open, onOpenChange, children }) {
 
 export function DialogContent({ className = "", children }) {
   return (
-    <div className={`w-[95vw] max-w-[95vw] rounded-xl bg-white p-4 shadow-lg ${className}`}>
+    <div
+      className={`w-[95vw] max-w-[95vw] max-h-[calc(100vh-8rem)] overflow-y-auto rounded-xl bg-white p-4 shadow-lg ${className}`}
+    >
       {children}
     </div>
   );
