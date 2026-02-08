@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useQuery } from '@tanstack/react-query';
 import {
   Select,
   SelectContent,
@@ -23,7 +24,6 @@ import { toast } from 'sonner';
 import { getCurrencySymbol } from '@/utils';
 
 const accountCategories = ['cash', 'bank', 'credit_card', 'savings', 'investment', 'other'];
-const fundOptions = ['Now', 'Safety', 'Investment'];
 const currencyOptions = [
   { code: 'EUR', label: 'Euro (EUR)' },
   { code: 'USD', label: 'US Dollar (USD)' },
@@ -130,10 +130,41 @@ const colorOptions = [
 ];
 
 export default function AccountForm({ account, onSuccess, onCancel }) {
-  const normalizeFund = (value) => {
-    if (!value) return 'Now';
-    const match = fundOptions.find((option) => option.toLowerCase() === String(value).toLowerCase());
-    return match || 'Now';
+  const { data: funds = [] } = useQuery({
+    queryKey: ['funds'],
+    queryFn: () => base44.entities.Fund.list('order'),
+  });
+
+  useEffect(() => {
+    if (funds.length > 0) return;
+    const defaults = [
+      { name: 'Now', color: '#0ea5e9', order: 0 },
+      { name: 'Safety', color: '#10b981', order: 1 },
+      { name: 'Investment', color: '#f59e0b', order: 2 },
+    ];
+    base44.entities.Fund.createMany(defaults).catch(() => {});
+  }, [funds.length]);
+
+  const distinctFunds = useMemo(() => {
+    const map = new Map();
+    funds.forEach((fund) => {
+      const key = (fund.name || '').trim().toLowerCase();
+      if (!key || map.has(key)) return;
+      map.set(key, fund);
+    });
+    return [...map.values()].sort((a, b) => {
+      const orderDiff = (a.order ?? 0) - (b.order ?? 0);
+      if (orderDiff !== 0) return orderDiff;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+  }, [funds]);
+
+  const resolveFundId = (value) => {
+    if (!value) return '';
+    const match = distinctFunds.find(
+      (fund) => fund.name.toLowerCase() === String(value).toLowerCase()
+    );
+    return match?.id || '';
   };
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -144,15 +175,26 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
     category: account.category,
     color: account.color,
     currency: account.currency || 'EUR',
-    fund: normalizeFund(account.fund)
+    fund_id: account.fund_id || ''
   } : {
     name: '',
     starting_balance: '',
     category: '',
     color: colorOptions[0],
     currency: 'EUR',
-    fund: 'Now'
+    fund_id: ''
   });
+
+  useEffect(() => {
+    if (!account || !funds.length) return;
+    if (formData.fund_id) return;
+    if (account.fund) {
+      const mapped = resolveFundId(account.fund);
+      if (mapped) {
+        setFormData((prev) => ({ ...prev, fund_id: mapped }));
+      }
+    }
+  }, [account, funds, formData.fund_id]);
 
   const capitalizeFirst = (value) => {
     const trimmed = (value || '').trim();
@@ -163,7 +205,7 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.starting_balance || !formData.category || !formData.currency || !formData.fund) {
+    if (!formData.name || !formData.starting_balance || !formData.category || !formData.currency) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -179,7 +221,7 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
         account.category !== formData.category ||
         account.color !== formData.color ||
         (account.currency || 'EUR') !== formData.currency ||
-        (account.fund || 'Now') !== formData.fund;
+        (account.fund_id || '') !== formData.fund_id;
 
       if (hasChanges) {
         await base44.entities.Account.update(account.id, {
@@ -188,7 +230,7 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
           category: formData.category,
           color: formData.color,
           currency: formData.currency,
-          fund: formData.fund
+          fund_id: formData.fund_id || null
         });
         await ensureStartingBalanceTransaction(account.id, normalizedBalance);
         toast.success('Account updated successfully');
@@ -202,7 +244,7 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
         category: formData.category,
         color: formData.color,
         currency: formData.currency,
-        fund: formData.fund
+        fund_id: formData.fund_id || null
       });
       await ensureStartingBalanceTransaction(created.id, normalizedBalance);
       toast.success('Account created successfully');
@@ -338,20 +380,20 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="fund">Fund *</Label>
+        <Label htmlFor="fund">Fund</Label>
         <Select
-          value={formData.fund}
-          onValueChange={(value) => setFormData({ ...formData, fund: value })}
-          required
+          value={formData.fund_id || ''}
+          onValueChange={(value) => setFormData({ ...formData, fund_id: value })}
           className="w-full"
         >
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Select fund" />
           </SelectTrigger>
           <SelectContent>
-            {fundOptions.map((fund) => (
-              <SelectItem key={fund} value={fund}>
-                {fund}
+            <SelectItem value="">Unassigned</SelectItem>
+            {distinctFunds.map((fund) => (
+              <SelectItem key={fund.id} value={fund.id}>
+                {fund.name}
               </SelectItem>
             ))}
           </SelectContent>

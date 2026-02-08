@@ -5,7 +5,7 @@ import { GripVertical, ChevronRight, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/utils';
 
-export default function AccountsList({ accounts, editMode, onReorder, onEdit, onDelete, onSelect, getAccountBalance, getUnclearedSum }) {
+export default function AccountsList({ accounts, editMode, onReorder, onEdit, onDelete, onSelect, getAccountBalance, getUnclearedSum, fundNameById }) {
   const handleDragEnd = (result) => {
     if (!result.destination) return;
     if (result.destination.index === result.source.index) return;
@@ -47,7 +47,7 @@ export default function AccountsList({ accounts, editMode, onReorder, onEdit, on
                               <h3 className="font-semibold text-slate-900">{account.name}</h3>
                               <p className="text-xs text-slate-500 capitalize">
                                 {account.category.replace('_', ' ')}
-                                {account.fund ? ` • ${account.fund}` : ''}
+                                {(fundNameById?.get(account.fund_id) || account.fund) ? ` • ${fundNameById?.get(account.fund_id) || account.fund}` : ''}
                               </p>
                             </div>
                           </div>
@@ -110,7 +110,7 @@ export default function AccountsList({ accounts, editMode, onReorder, onEdit, on
                   <h3 className="font-semibold text-slate-900">{account.name}</h3>
                   <p className="text-xs text-slate-500 capitalize">
                     {account.category.replace('_', ' ')}
-                    {account.fund ? ` • ${account.fund}` : ''}
+                    {(fundNameById?.get(account.fund_id) || account.fund) ? ` • ${fundNameById?.get(account.fund_id) || account.fund}` : ''}
                   </p>
                 </div>
               </div>

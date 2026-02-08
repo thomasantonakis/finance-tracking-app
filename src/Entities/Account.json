@@ -30,14 +30,9 @@
       "type": "string",
       "description": "Account currency code (ISO 4217)"
     },
-    "fund": {
+    "fund_id": {
       "type": "string",
-      "enum": [
-        "Now",
-        "Safety",
-        "Investment"
-      ],
-      "description": "Fund bucket"
+      "description": "Fund reference"
     }
   },
   "required": [
@@ -45,8 +40,7 @@
     "starting_balance",
     "category",
     "color",
-    "currency",
-    "fund"
+    "currency"
   ],
   "rls": {
     "create": {

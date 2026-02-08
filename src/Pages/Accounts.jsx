@@ -56,6 +56,11 @@ export default function Accounts() {
     }
   });
 
+  const { data: funds = [] } = useQuery({
+    queryKey: ['funds'],
+    queryFn: () => base44.entities.Fund.list('order'),
+  });
+
   React.useEffect(() => {
     if (accounts.length > 0) {
       setOrderedAccounts(applyStoredOrder(accounts));
@@ -403,8 +408,11 @@ export default function Accounts() {
         return;
       }
       const mainValue = balance / rate;
-      const fund = acc.fund || 'Now';
-      totals.set(fund, (totals.get(fund) || 0) + mainValue);
+      const fundName =
+        funds.find((fund) => fund.id === acc.fund_id)?.name ||
+        acc.fund ||
+        'Unassigned';
+      totals.set(fundName, (totals.get(fundName) || 0) + mainValue);
     });
     const data = Array.from(totals.entries()).map(([fund, amount]) => ({
       fund,
@@ -418,13 +426,22 @@ export default function Accounts() {
       percent: totalAbs > 0 ? (Math.abs(item.amount) / totalAbs) * 100 : 0,
     }));
     return { data: withPercent, skipped };
-  }, [displayAccounts, getAccountBalance, fxRates, mainCurrency]);
+  }, [displayAccounts, getAccountBalance, fxRates, mainCurrency, funds]);
 
-  const fundColors = {
-    Now: '#0ea5e9',
-    Safety: '#10b981',
-    Investment: '#f59e0b',
-  };
+  const fundColors = useMemo(() => {
+    const map = {};
+    funds.forEach((fund) => {
+      map[fund.name] = fund.color || '#94a3b8';
+    });
+    map.Unassigned = '#94a3b8';
+    return map;
+  }, [funds]);
+
+  const fundNameById = useMemo(() => {
+    const map = new Map();
+    funds.forEach((fund) => map.set(fund.id, fund.name));
+    return map;
+  }, [funds]);
 
 
   if (selectedAccount) {
@@ -614,6 +631,7 @@ export default function Accounts() {
                 onSelect={setSelectedAccount}
                 getAccountBalance={getAccountBalance}
                 getUnclearedSum={getUnclearedSum}
+                fundNameById={fundNameById}
               />
               {!editMode && accountFundTotals.data.length > 0 && (
                 <div className="bg-white rounded-2xl p-4 border border-slate-100 mt-4">

@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { format, addWeeks, addMonths, addYears } from 'date-fns';
 import CategoryManager from '../Components/settings/CategoryManager';
+import FundManager from '../Components/settings/FundManager';
 import { Progress } from '@/components/ui/progress';
 import {
   AlertDialog,
@@ -35,6 +36,7 @@ export default function Settings() {
   const [showExpenseCategories, setShowExpenseCategories] = useState(false);
   const [showIncomeCategories, setShowIncomeCategories] = useState(false);
   const [showSubcategoryIssues, setShowSubcategoryIssues] = useState(false);
+  const [showFunds, setShowFunds] = useState(false);
   const [showBulkUpdater, setShowBulkUpdater] = useState(false);
   const [showRecurringModal, setShowRecurringModal] = useState(false);
   const [showImportHelp, setShowImportHelp] = useState(false);
@@ -2599,7 +2601,7 @@ export default function Settings() {
           <h1 className="text-2xl font-bold text-slate-900 mb-6">Settings</h1>
 
           <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-100 overflow-visible">
               <div className="p-4 border-b border-slate-100">
                 <h2 className="font-semibold text-slate-900">Preferences</h2>
               </div>
@@ -2960,6 +2962,29 @@ export default function Settings() {
                     </div>
                   )}
                 </div>
+                <button
+                  onClick={() => setShowFunds((prev) => !prev)}
+                  className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="p-2 rounded-lg bg-emerald-50">
+                    <span className="text-emerald-600 font-semibold">F</span>
+                  </div>
+                  <div className="flex-1 text-left">
+                    <p className="font-medium text-slate-900">Manage Funds</p>
+                    <p className="text-sm text-slate-500">Create, reorder, and color fund buckets</p>
+                  </div>
+                  {showFunds ? (
+                    <ChevronDown className="w-4 h-4 text-slate-500" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-slate-500" />
+                  )}
+                </button>
+
+                {showFunds && (
+                  <div className="p-4 pt-0">
+                    <FundManager />
+                  </div>
+                )}
               </div>
             </div>
 

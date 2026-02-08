@@ -1,0 +1,36 @@
+{
+  "name": "Fund",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Fund name"
+    },
+    "color": {
+      "type": "string",
+      "description": "Fund color"
+    },
+    "order": {
+      "type": "number",
+      "description": "Sort order"
+    }
+  },
+  "required": [
+    "name",
+    "color"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}
