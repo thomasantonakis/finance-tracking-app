@@ -40,9 +40,9 @@ export default function Accounts() {
   const applyStoredOrder = (list) => {
     const order = getAccountsOrder();
     if (!order.length) return list;
-    const byId = new Map(list.map((acc) => [acc.id, acc]));
-    const ordered = order.map((id) => byId.get(id)).filter(Boolean);
-    const remaining = list.filter((acc) => !order.includes(acc.id));
+    const byId = new Map(list.map((acc) => [String(acc.id), acc]));
+    const ordered = order.map((id) => byId.get(String(id))).filter(Boolean);
+    const remaining = list.filter((acc) => !order.includes(String(acc.id)));
     return [...ordered, ...remaining];
   };
 
@@ -390,6 +390,43 @@ export default function Accounts() {
     });
   }, [totalsWithMain]);
 
+  const accountFundTotals = useMemo(() => {
+    const rates = fxRates?.rates || {};
+    const totals = new Map();
+    let skipped = 0;
+    displayAccounts.forEach((acc) => {
+      const balance = getAccountBalance(acc.id);
+      const code = acc.currency || 'EUR';
+      const rate = code === mainCurrency ? 1 : rates[code];
+      if (!rate) {
+        skipped += 1;
+        return;
+      }
+      const mainValue = balance / rate;
+      const fund = acc.fund || 'Now';
+      totals.set(fund, (totals.get(fund) || 0) + mainValue);
+    });
+    const data = Array.from(totals.entries()).map(([fund, amount]) => ({
+      fund,
+      amount,
+      absAmount: Math.abs(amount),
+    }));
+    data.sort((a, b) => b.amount - a.amount);
+    const totalAbs = data.reduce((sum, item) => sum + item.absAmount, 0);
+    const withPercent = data.map((item) => ({
+      ...item,
+      percent: totalAbs > 0 ? (Math.abs(item.amount) / totalAbs) * 100 : 0,
+    }));
+    return { data: withPercent, skipped };
+  }, [displayAccounts, getAccountBalance, fxRates, mainCurrency]);
+
+  const fundColors = {
+    Now: '#0ea5e9',
+    Safety: '#10b981',
+    Investment: '#f59e0b',
+  };
+
+
   if (selectedAccount) {
     const account = accounts.find(a => a.id === selectedAccount);
     const balance = getAccountBalance(selectedAccount);
@@ -502,7 +539,15 @@ export default function Accounts() {
               </Button>
               <Button
                 variant={editMode ? 'default' : 'outline'}
-                onClick={() => setEditMode(!editMode)}
+                onClick={() => {
+                  if (editMode) {
+                    const snapshot = (orderedAccounts.length > 0 ? orderedAccounts : accounts).map(
+                      (acc) => acc.id
+                    );
+                    setAccountsOrder(snapshot);
+                  }
+                  setEditMode(!editMode);
+                }}
                 className={editMode ? 'bg-slate-900' : ''}
               >
                 {editMode ? <><Check className="w-4 h-4 mr-2" /> Done</> : <><Edit3 className="w-4 h-4 mr-2" /> Edit</>}
@@ -559,16 +604,74 @@ export default function Accounts() {
               </Button>
             </div>
           ) : (
-            <AccountsList
-              accounts={displayAccounts}
-              editMode={editMode}
-              onReorder={handleReorder}
-              onEdit={setEditingAccount}
-              onDelete={setPendingDeleteAccount}
-              onSelect={setSelectedAccount}
-              getAccountBalance={getAccountBalance}
-              getUnclearedSum={getUnclearedSum}
-            />
+            <>
+              <AccountsList
+                accounts={displayAccounts}
+                editMode={editMode}
+                onReorder={handleReorder}
+                onEdit={setEditingAccount}
+                onDelete={setPendingDeleteAccount}
+                onSelect={setSelectedAccount}
+                getAccountBalance={getAccountBalance}
+                getUnclearedSum={getUnclearedSum}
+              />
+              {!editMode && accountFundTotals.data.length > 0 && (
+                <div className="bg-white rounded-2xl p-4 border border-slate-100 mt-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="text-sm text-slate-500">Balances by Fund</p>
+                      <p className="text-xs text-slate-400">All amounts in {mainCurrency}</p>
+                    </div>
+                  </div>
+                  <div className="overflow-hidden rounded-xl border border-slate-200">
+                    <div className="grid grid-cols-[1.4fr_0.7fr_0.5fr_1fr] gap-3 px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                      <div>Fund</div>
+                      <div className="text-right">Amount</div>
+                      <div className="text-right">% Total</div>
+                      <div>Share</div>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {accountFundTotals.data.map((entry) => (
+                        <div
+                          key={entry.fund}
+                          className="grid grid-cols-[1.4fr_0.7fr_0.5fr_1fr] gap-3 px-4 py-2 text-sm"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="h-2.5 w-2.5 rounded-full"
+                              style={{ backgroundColor: fundColors[entry.fund] || '#94a3b8' }}
+                            />
+                            <span className="font-medium text-slate-900">{entry.fund}</span>
+                          </div>
+                          <div className="text-right font-semibold text-slate-900 tabular-nums">
+                            {formatCurrency(entry.amount, mainCurrency)}
+                          </div>
+                          <div className="text-right text-slate-500 tabular-nums">
+                            {entry.percent.toFixed(1)}%
+                          </div>
+                          <div className="flex items-center">
+                            <div className="h-2 w-full rounded-full bg-slate-200">
+                              <div
+                                className="h-2 rounded-full"
+                                style={{
+                                  width: `${entry.percent}%`,
+                                  backgroundColor: fundColors[entry.fund] || '#94a3b8',
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {accountFundTotals.skipped > 0 && (
+                    <p className="text-xs text-slate-400 mt-2">
+                      {accountFundTotals.skipped} account(s) omitted due to missing FX rates.
+                    </p>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </motion.div>
       </div>

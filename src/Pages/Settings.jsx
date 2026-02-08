@@ -34,6 +34,7 @@ export default function Settings() {
   const [showCustomize, setShowCustomize] = useState(false);
   const [showExpenseCategories, setShowExpenseCategories] = useState(false);
   const [showIncomeCategories, setShowIncomeCategories] = useState(false);
+  const [showSubcategoryIssues, setShowSubcategoryIssues] = useState(false);
   const [showBulkUpdater, setShowBulkUpdater] = useState(false);
   const [showRecurringModal, setShowRecurringModal] = useState(false);
   const [showImportHelp, setShowImportHelp] = useState(false);
@@ -234,6 +235,46 @@ export default function Settings() {
     });
     return result;
   }, [allTransactions, recurringForm.type, reservedCategoryNames]);
+
+  const problematicSubcategories = useMemo(() => {
+    const stats = new Map();
+    allTransactions.forEach((t) => {
+      const sub = (t.subcategory || '').trim();
+      const cat = (t.category || '').trim();
+      if (!sub || !cat) return;
+      if (reservedCategoryNames.has(cat.toLowerCase())) return;
+      const key = sub.toLowerCase();
+      if (!stats.has(key)) {
+        stats.set(key, {
+          name: sub,
+          count: 0,
+          categories: new Set(),
+        });
+      }
+      const entry = stats.get(key);
+      entry.count += 1;
+      entry.categories.add(cat);
+    });
+
+    return Array.from(stats.values())
+      .map((entry) => {
+        const categories = Array.from(entry.categories);
+        const issues = [];
+        if (entry.count < 3) issues.push('Too few transactions');
+        if (categories.length > 1) issues.push('Multiple categories');
+        return {
+          name: entry.name,
+          count: entry.count,
+          categories,
+          issues,
+        };
+      })
+      .filter((entry) => entry.issues.length > 0)
+      .sort((a, b) => {
+        if (a.issues.length !== b.issues.length) return b.issues.length - a.issues.length;
+        return a.count - b.count;
+      });
+  }, [allTransactions, reservedCategoryNames]);
 
   const [goalCategories, setGoalCategories] = useState([]);
   const [goalAmount, setGoalAmount] = useState('');
@@ -2866,6 +2907,59 @@ export default function Settings() {
                     </div>
                   </div>
                 )}
+                <div className="border-t border-slate-100">
+                  <button
+                    onClick={() => setShowSubcategoryIssues((prev) => !prev)}
+                    className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors"
+                  >
+                    <div className="p-2 rounded-lg bg-emerald-50">
+                      <span className="text-emerald-600 font-semibold">SC</span>
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="font-medium text-slate-900">Manage Subcategories</p>
+                      <p className="text-sm text-slate-500">Review inconsistent or tiny subcategories</p>
+                    </div>
+                    {showSubcategoryIssues ? (
+                      <ChevronDown className="w-4 h-4 text-slate-500" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-slate-500" />
+                    )}
+                  </button>
+                  {showSubcategoryIssues && (
+                    <div className="p-4 pt-0">
+                      {problematicSubcategories.length === 0 ? (
+                        <div className="text-sm text-slate-500">No problematic subcategories found.</div>
+                      ) : (
+                        <div className="overflow-auto rounded-lg border border-slate-200">
+                          <table className="w-full text-left text-sm">
+                            <thead className="bg-slate-50 text-slate-500">
+                              <tr>
+                                <th className="px-3 py-2">Subcategory</th>
+                                <th className="px-3 py-2">Transactions</th>
+                                <th className="px-3 py-2">Categories</th>
+                                <th className="px-3 py-2">Issues</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {problematicSubcategories.map((entry) => (
+                                <tr key={entry.name} className="border-t border-slate-100">
+                                  <td className="px-3 py-2 font-medium text-slate-900">{entry.name}</td>
+                                  <td className="px-3 py-2 text-slate-600 tabular-nums">{entry.count}</td>
+                                  <td className="px-3 py-2 text-slate-600">
+                                    {entry.categories.join(', ')}
+                                  </td>
+                                  <td className="px-3 py-2 text-slate-600">
+                                    {entry.issues.join(' • ')}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 

@@ -158,7 +158,17 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
           className="w-full"
         >
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select source account" />
+            {fromAccount ? (
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: fromAccount.color }}
+                />
+                <span>{fromAccount.name}</span>
+              </div>
+            ) : (
+              <span className="text-slate-500">Select source account</span>
+            )}
           </SelectTrigger>
           <SelectContent>
             {fromOptions.map((account) => (
@@ -197,7 +207,17 @@ export default function TransferForm({ onSuccess, onCancel, initialData, initial
           className="w-full"
         >
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select destination account" />
+            {toAccount ? (
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: toAccount.color }}
+                />
+                <span>{toAccount.name}</span>
+              </div>
+            ) : (
+              <span className="text-slate-500">Select destination account</span>
+            )}
           </SelectTrigger>
           <SelectContent>
             {toOptions.map((account) => (

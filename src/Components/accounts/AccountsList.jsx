@@ -45,7 +45,10 @@ export default function AccountsList({ accounts, editMode, onReorder, onEdit, on
                             </div>
                             <div className="flex-1">
                               <h3 className="font-semibold text-slate-900">{account.name}</h3>
-                              <p className="text-xs text-slate-500 capitalize">{account.category.replace('_', ' ')}</p>
+                              <p className="text-xs text-slate-500 capitalize">
+                                {account.category.replace('_', ' ')}
+                                {account.fund ? ` • ${account.fund}` : ''}
+                              </p>
                             </div>
                           </div>
                           
@@ -105,7 +108,10 @@ export default function AccountsList({ accounts, editMode, onReorder, onEdit, on
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold text-slate-900">{account.name}</h3>
-                  <p className="text-xs text-slate-500 capitalize">{account.category.replace('_', ' ')}</p>
+                  <p className="text-xs text-slate-500 capitalize">
+                    {account.category.replace('_', ' ')}
+                    {account.fund ? ` • ${account.fund}` : ''}
+                  </p>
                 </div>
               </div>
               

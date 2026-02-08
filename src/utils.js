@@ -193,7 +193,7 @@ export function getAccountsOrder() {
   try {
     const raw = localStorage.getItem(ACCOUNTS_ORDER_KEY);
     const parsed = JSON.parse(raw || "[]");
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? parsed.map((id) => String(id)) : [];
   } catch {
     return [];
   }
@@ -202,7 +202,10 @@ export function getAccountsOrder() {
 export function setAccountsOrder(order) {
   if (!Array.isArray(order)) return;
   try {
-    localStorage.setItem(ACCOUNTS_ORDER_KEY, JSON.stringify(order));
+    localStorage.setItem(
+      ACCOUNTS_ORDER_KEY,
+      JSON.stringify(order.map((id) => String(id)))
+    );
   } catch {
     // Ignore storage failures.
   }
@@ -211,9 +214,9 @@ export function setAccountsOrder(order) {
 export function sortAccountsByOrder(accounts) {
   const order = getAccountsOrder();
   if (!order.length) return accounts;
-  const byId = new Map(accounts.map((acc) => [acc.id, acc]));
-  const ordered = order.map((id) => byId.get(id)).filter(Boolean);
-  const remaining = accounts.filter((acc) => !order.includes(acc.id));
+  const byId = new Map(accounts.map((acc) => [String(acc.id), acc]));
+  const ordered = order.map((id) => byId.get(String(id))).filter(Boolean);
+  const remaining = accounts.filter((acc) => !order.includes(String(acc.id)));
   return [...ordered, ...remaining];
 }
 

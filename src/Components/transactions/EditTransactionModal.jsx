@@ -46,6 +46,7 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
   });
   const orderedAccounts = sortAccountsByOrder(accounts);
   const selectedAccountCurrency = accounts.find((a) => a.id === formData.account_id)?.currency || 'EUR';
+  const selectedAccount = orderedAccounts.find((a) => a.id === formData.account_id);
 
   React.useEffect(() => {
     if (!transaction) return;
@@ -244,15 +245,31 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
                 className="w-full"
               >
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select account" />
+                {selectedAccount ? (
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: selectedAccount.color }}
+                    />
+                    <span>{selectedAccount.name}</span>
+                  </div>
+                ) : (
+                  <span className="text-slate-500">Select account</span>
+                )}
               </SelectTrigger>
-                <SelectContent>
-                  {orderedAccounts.map((account) => (
-                    <SelectItem key={account.id} value={account.id}>
+              <SelectContent>
+                {orderedAccounts.map((account) => (
+                  <SelectItem key={account.id} value={account.id} label={account.name}>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: account.color }}
+                      />
                       {account.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
               </Select>
             </div>
 

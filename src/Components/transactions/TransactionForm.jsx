@@ -66,6 +66,7 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
   });
   const orderedAccounts = sortAccountsByOrder(accounts);
   const selectedAccountCurrency = accounts.find((a) => a.id === formData.account_id)?.currency || 'EUR';
+  const selectedAccount = orderedAccounts.find((a) => a.id === formData.account_id);
 
   const transactionEntity = type === 'income' ? 'Income' : 'Expense';
   const { data: transactions = [] } = useQuery({
@@ -282,7 +283,17 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
             className="w-full"
           >
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select account" />
+              {selectedAccount ? (
+                <div className="flex items-center gap-2">
+                  <div
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: selectedAccount.color }}
+                  />
+                  <span>{selectedAccount.name}</span>
+                </div>
+              ) : (
+                <span className="text-slate-500">Select account</span>
+              )}
             </SelectTrigger>
             <SelectContent>
               {orderedAccounts.map((account) => (

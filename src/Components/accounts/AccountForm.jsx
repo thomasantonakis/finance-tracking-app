@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 import { getCurrencySymbol } from '@/utils';
 
 const accountCategories = ['cash', 'bank', 'credit_card', 'savings', 'investment', 'other'];
+const fundOptions = ['Now', 'Safety', 'Investment'];
 const currencyOptions = [
   { code: 'EUR', label: 'Euro (EUR)' },
   { code: 'USD', label: 'US Dollar (USD)' },
@@ -129,6 +130,11 @@ const colorOptions = [
 ];
 
 export default function AccountForm({ account, onSuccess, onCancel }) {
+  const normalizeFund = (value) => {
+    if (!value) return 'Now';
+    const match = fundOptions.find((option) => option.toLowerCase() === String(value).toLowerCase());
+    return match || 'Now';
+  };
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -137,13 +143,15 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
     starting_balance: account.starting_balance.toString(),
     category: account.category,
     color: account.color,
-    currency: account.currency || 'EUR'
+    currency: account.currency || 'EUR',
+    fund: normalizeFund(account.fund)
   } : {
     name: '',
     starting_balance: '',
     category: '',
     color: colorOptions[0],
-    currency: 'EUR'
+    currency: 'EUR',
+    fund: 'Now'
   });
 
   const capitalizeFirst = (value) => {
@@ -155,7 +163,7 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.starting_balance || !formData.category || !formData.currency) {
+    if (!formData.name || !formData.starting_balance || !formData.category || !formData.currency || !formData.fund) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -170,7 +178,8 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
         Number(account.starting_balance) !== Number(normalizedBalance) ||
         account.category !== formData.category ||
         account.color !== formData.color ||
-        (account.currency || 'EUR') !== formData.currency;
+        (account.currency || 'EUR') !== formData.currency ||
+        (account.fund || 'Now') !== formData.fund;
 
       if (hasChanges) {
         await base44.entities.Account.update(account.id, {
@@ -178,7 +187,8 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
           starting_balance: normalizedBalance,
           category: formData.category,
           color: formData.color,
-          currency: formData.currency
+          currency: formData.currency,
+          fund: formData.fund
         });
         await ensureStartingBalanceTransaction(account.id, normalizedBalance);
         toast.success('Account updated successfully');
@@ -191,7 +201,8 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
         starting_balance: normalizedBalance,
         category: formData.category,
         color: formData.color,
-        currency: formData.currency
+        currency: formData.currency,
+        fund: formData.fund
       });
       await ensureStartingBalanceTransaction(created.id, normalizedBalance);
       toast.success('Account created successfully');
@@ -320,6 +331,27 @@ export default function AccountForm({ account, onSuccess, onCancel }) {
             {currencyOptions.map((currency) => (
               <SelectItem key={currency.code} value={currency.code}>
                 {currency.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="fund">Fund *</Label>
+        <Select
+          value={formData.fund}
+          onValueChange={(value) => setFormData({ ...formData, fund: value })}
+          required
+          className="w-full"
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select fund" />
+          </SelectTrigger>
+          <SelectContent>
+            {fundOptions.map((fund) => (
+              <SelectItem key={fund} value={fund}>
+                {fund}
               </SelectItem>
             ))}
           </SelectContent>

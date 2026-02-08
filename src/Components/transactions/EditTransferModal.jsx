@@ -128,6 +128,8 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
 
   const createdStamp = transfer?.created_at ?? transfer?.created_date;
   const updatedStamp = transfer?.updated_at ?? transfer?.updated_date ?? createdStamp;
+  const fromAccount = accounts.find((a) => a.id === formData.from_account_id);
+  const toAccount = accounts.find((a) => a.id === formData.to_account_id);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -152,7 +154,17 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
               className="w-full"
             >
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select account" />
+                {fromAccount ? (
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: fromAccount.color }}
+                    />
+                    <span>{fromAccount.name}</span>
+                  </div>
+                ) : (
+                  <span className="text-slate-500">Select account</span>
+                )}
               </SelectTrigger>
               <SelectContent>
                 {fromOptions.map((account) => (
@@ -191,7 +203,17 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
               className="w-full"
             >
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select account" />
+                {toAccount ? (
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: toAccount.color }}
+                    />
+                    <span>{toAccount.name}</span>
+                  </div>
+                ) : (
+                  <span className="text-slate-500">Select account</span>
+                )}
               </SelectTrigger>
               <SelectContent>
                 {toOptions.map((account) => (
