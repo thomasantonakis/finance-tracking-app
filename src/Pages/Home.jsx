@@ -208,13 +208,13 @@ export default function Home() {
     let compareEnd;
 
     if (selectedPeriod === 'last30') {
-      reportStart = startOfDay(subDays(now, 30));
-      compareStart = startOfDay(subDays(now, 60));
-      compareEnd = endOfDay(subDays(now, 31));
+      reportStart = startOfDay(subDays(now, 29));
+      compareStart = startOfDay(subDays(now, 59));
+      compareEnd = endOfDay(subDays(now, 30));
     } else if (selectedPeriod === 'last90') {
-      reportStart = startOfDay(subDays(now, 90));
-      compareStart = startOfDay(subDays(now, 180));
-      compareEnd = endOfDay(subDays(now, 91));
+      reportStart = startOfDay(subDays(now, 89));
+      compareStart = startOfDay(subDays(now, 179));
+      compareEnd = endOfDay(subDays(now, 90));
     } else if (selectedPeriod === 'thisMonth') {
       reportStart = startOfMonth(now);
       const lastMonth = subMonths(now, 1);
