@@ -1,0 +1,43 @@
+{
+  "name": "UserSettings",
+  "type": "object",
+  "properties": {
+    "number_format": {
+      "type": "string",
+      "description": "Number format (dot or comma)"
+    },
+    "main_currency": {
+      "type": "string",
+      "description": "Main currency code"
+    },
+    "fx_provider": {
+      "type": "string",
+      "description": "FX provider key"
+    },
+    "accounts_order": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Account order ids"
+    }
+  },
+  "required": [
+    "number_format",
+    "fx_provider"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

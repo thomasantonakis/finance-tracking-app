@@ -145,5 +145,6 @@ export const base44 = {
     RecurringRule: makeEntity("RecurringRule"),
     Goal: makeEntity("Goal"),
     Fund: makeEntity("Fund"),
+    UserSettings: makeEntity("UserSettings"),
   },
 };

@@ -26,8 +26,125 @@ const DUPLICATE_DATE_KEY = "__base44_duplicate_date__";
 const NUMBER_FORMAT_KEY = "__base44_number_format__";
 const ACCOUNTS_ORDER_KEY = "__base44_accounts_order__";
 const MAIN_CURRENCY_KEY = "__base44_main_currency__";
+const USER_SETTINGS_KEY = "__base44_user_settings__";
 const FX_RATES_KEY_PREFIX = "__base44_fx_rates__";
 const FX_PROVIDER_KEY = "__base44_fx_provider__";
+
+const DEFAULT_USER_SETTINGS = {
+  number_format: "dot",
+  main_currency: null,
+  fx_provider: "exchangerate.host",
+  accounts_order: [],
+};
+
+let userSettingsCache = null;
+let userSettingsId = null;
+let settingsWriteInFlight = Promise.resolve();
+
+function readLegacyNumberFormat() {
+  try {
+    const stored = localStorage.getItem(NUMBER_FORMAT_KEY);
+    if (stored === "dot" || stored === "comma") return stored;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function readLegacyMainCurrency() {
+  try {
+    return localStorage.getItem(MAIN_CURRENCY_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function readLegacyFxProvider() {
+  try {
+    return localStorage.getItem(FX_PROVIDER_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function readLegacyAccountsOrder() {
+  try {
+    const raw = localStorage.getItem(ACCOUNTS_ORDER_KEY);
+    const parsed = JSON.parse(raw || "[]");
+    return Array.isArray(parsed) ? parsed.map((id) => String(id)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function getUserSettingsCache() {
+  if (userSettingsCache) return userSettingsCache;
+  try {
+    const raw = localStorage.getItem(USER_SETTINGS_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    userSettingsCache = { ...DEFAULT_USER_SETTINGS, ...parsed };
+  } catch {
+    userSettingsCache = { ...DEFAULT_USER_SETTINGS };
+  }
+  return userSettingsCache;
+}
+
+function setUserSettingsCache(next) {
+  userSettingsCache = { ...DEFAULT_USER_SETTINGS, ...next };
+  try {
+    localStorage.setItem(USER_SETTINGS_KEY, JSON.stringify(userSettingsCache));
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function persistUserSettings(patch) {
+  settingsWriteInFlight = settingsWriteInFlight.then(async () => {
+    try {
+      let id = userSettingsId;
+      if (!id) {
+        const existing = await base44.entities.UserSettings.list();
+        if (existing.length > 0) {
+          id = existing[0].id;
+          userSettingsId = id;
+        } else {
+          const created = await base44.entities.UserSettings.create({
+            ...getUserSettingsCache(),
+            ...patch,
+          });
+          userSettingsId = created.id;
+          return;
+        }
+      }
+      await base44.entities.UserSettings.update(id, patch);
+    } catch {
+      // Ignore persistence failures; cache remains.
+    }
+  });
+}
+
+export async function bootstrapUserSettings() {
+  try {
+    const existing = await base44.entities.UserSettings.list();
+    if (existing.length > 0) {
+      userSettingsId = existing[0].id;
+      setUserSettingsCache(existing[0]);
+      return;
+    }
+    const seed = {
+      number_format: readLegacyNumberFormat() || DEFAULT_USER_SETTINGS.number_format,
+      main_currency: readLegacyMainCurrency(),
+      fx_provider: readLegacyFxProvider() || DEFAULT_USER_SETTINGS.fx_provider,
+      accounts_order: readLegacyAccountsOrder(),
+    };
+    const created = await base44.entities.UserSettings.create(seed);
+    userSettingsId = created.id;
+    setUserSettingsCache(created);
+  } catch {
+    // Ignore bootstrap failures; fall back to cache.
+    getUserSettingsCache();
+  }
+}
 
 export function getDuplicateDate() {
   try {
@@ -47,40 +164,27 @@ export function setDuplicateDate(dateValue) {
 }
 
 export function getNumberFormat() {
-  try {
-    const stored = localStorage.getItem(NUMBER_FORMAT_KEY);
-    if (stored === "dot" || stored === "comma") return stored;
-    localStorage.setItem(NUMBER_FORMAT_KEY, "dot");
-    return "dot";
-  } catch {
-    return "dot";
-  }
+  const cached = getUserSettingsCache();
+  return cached.number_format || "dot";
 }
 
 export function setNumberFormat(value) {
   if (value !== "dot" && value !== "comma") return;
-  try {
-    localStorage.setItem(NUMBER_FORMAT_KEY, value);
-  } catch {
-    // Ignore storage failures.
-  }
+  const cached = getUserSettingsCache();
+  setUserSettingsCache({ ...cached, number_format: value });
+  persistUserSettings({ number_format: value });
 }
 
 export function getMainCurrency() {
-  try {
-    return localStorage.getItem(MAIN_CURRENCY_KEY);
-  } catch {
-    return null;
-  }
+  const cached = getUserSettingsCache();
+  return cached.main_currency || null;
 }
 
 export function setMainCurrency(value) {
   if (!value) return;
-  try {
-    localStorage.setItem(MAIN_CURRENCY_KEY, value);
-  } catch {
-    // Ignore storage failures.
-  }
+  const cached = getUserSettingsCache();
+  setUserSettingsCache({ ...cached, main_currency: value });
+  persistUserSettings({ main_currency: value });
 }
 
 export function getFxRatesKey(baseCurrency) {
@@ -105,20 +209,15 @@ export function writeFxRates(baseCurrency, payload) {
 }
 
 export function getFxProvider() {
-  try {
-    return localStorage.getItem(FX_PROVIDER_KEY) || "exchangerate.host";
-  } catch {
-    return "exchangerate.host";
-  }
+  const cached = getUserSettingsCache();
+  return cached.fx_provider || "exchangerate.host";
 }
 
 export function setFxProvider(value) {
   if (!value) return;
-  try {
-    localStorage.setItem(FX_PROVIDER_KEY, value);
-  } catch {
-    // Ignore storage failures.
-  }
+  const cached = getUserSettingsCache();
+  setUserSettingsCache({ ...cached, fx_provider: value });
+  persistUserSettings({ fx_provider: value });
 }
 
 export function formatAmount(value, decimals = 2) {
@@ -190,25 +289,18 @@ export function getCurrencySymbol(currency = "EUR") {
 }
 
 export function getAccountsOrder() {
-  try {
-    const raw = localStorage.getItem(ACCOUNTS_ORDER_KEY);
-    const parsed = JSON.parse(raw || "[]");
-    return Array.isArray(parsed) ? parsed.map((id) => String(id)) : [];
-  } catch {
-    return [];
-  }
+  const cached = getUserSettingsCache();
+  return Array.isArray(cached.accounts_order)
+    ? cached.accounts_order.map((id) => String(id))
+    : [];
 }
 
 export function setAccountsOrder(order) {
   if (!Array.isArray(order)) return;
-  try {
-    localStorage.setItem(
-      ACCOUNTS_ORDER_KEY,
-      JSON.stringify(order.map((id) => String(id)))
-    );
-  } catch {
-    // Ignore storage failures.
-  }
+  const normalized = order.map((id) => String(id));
+  const cached = getUserSettingsCache();
+  setUserSettingsCache({ ...cached, accounts_order: normalized });
+  persistUserSettings({ accounts_order: normalized });
 }
 
 export function sortAccountsByOrder(accounts) {

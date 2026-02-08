@@ -7,6 +7,7 @@ import Accounts from "./Pages/Accounts.jsx";
 import Calendar from "./Pages/Calendar.jsx";
 import Charts from "./Pages/Charts.jsx";
 import Settings from "./Pages/Settings.jsx";
+import { bootstrapUserSettings } from "./utils.js";
 
 export default function App() {
   const { pathname } = useLocation();
@@ -14,6 +15,10 @@ export default function App() {
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   }, [pathname]);
+
+  useEffect(() => {
+    bootstrapUserSettings();
+  }, []);
 
   return (
     <Layout>
