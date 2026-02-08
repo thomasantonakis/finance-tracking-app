@@ -89,7 +89,7 @@ export default function NetWorthCard({
         <div className="grid grid-cols-2 gap-6">
           <div className="space-y-1">
             <p className="text-xs font-medium text-slate-400">Income</p>
-            <p className="text-xl font-semibold text-green-400 tabular-nums">
+            <p className="text-xl font-semibold text-white tabular-nums">
               +€{formatAmount(totalIncome)}
             </p>
             <p className={`text-xs tabular-nums ${incomeDeltaClass}`}>
@@ -101,7 +101,7 @@ export default function NetWorthCard({
           </div>
           <div className="space-y-1">
             <p className="text-xs font-medium text-slate-400">Expenses</p>
-            <p className="text-xl font-semibold text-red-400 tabular-nums">
+            <p className="text-xl font-semibold text-white tabular-nums">
               -€{formatAmount(totalExpenses)}
             </p>
             <p className={`text-xs tabular-nums ${expenseDeltaClass}`}>
