@@ -65,8 +65,18 @@ export default function CategoryCombobox({
   }, [open]);
 
     const handleSelect = (item) => {
-      onChange(item.label);
-      onSelectItem?.(item);
+      if (typeof item === "string") {
+        const labelValue = item.trim();
+        onChange(labelValue);
+        onSelectItem?.({
+          label: formatLabel(labelValue),
+          value: normalizeValue(labelValue),
+          color: null,
+        });
+      } else {
+        onChange(item.label);
+        onSelectItem?.(item);
+      }
       setHasUserTyped(false);
       setOpen(false);
     };
