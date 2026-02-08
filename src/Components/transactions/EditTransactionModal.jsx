@@ -20,7 +20,7 @@ import { base44 } from '@/api/base44Client';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { sortAccountsByOrder, getCurrencySymbol } from '@/utils';
+import { sortAccountsByOrder, getCurrencySymbol, evaluateNumericInput, needsEvaluation } from '@/utils';
 import CategoryCombobox from './CategoryCombobox';
 
 const expenseCategories = ['food', 'transport', 'utilities', 'entertainment', 'shopping', 'health', 'education', 'travel', 'subscriptions', 'housing', 'other'];
@@ -134,10 +134,16 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
     
   const rawCategory = (formData.category || '').trim();
   const rawSubcategory = (formData.subcategory || '').trim();
-  if (!formData.amount || !rawCategory || !rawSubcategory || !formData.account_id || !formData.date) {
-    toast.error('Please fill in all required fields');
-    return;
-  }
+    if (!formData.amount || !rawCategory || !rawSubcategory || !formData.account_id || !formData.date) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    const amountValue = evaluateNumericInput(formData.amount);
+    if (amountValue === null || !Number.isFinite(amountValue) || amountValue < 0) {
+      toast.error('Please enter a valid amount');
+      return;
+    }
 
     setLoading(true);
     
@@ -166,8 +172,8 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
     }
   }
 
-  await base44.entities[entity].update(transaction.id, {
-    amount: parseFloat(formData.amount),
+    await base44.entities[entity].update(transaction.id, {
+      amount: amountValue,
     category: finalCategory,
     subcategory: rawSubcategory,
       account_id: formData.account_id,
@@ -224,13 +230,28 @@ export default function EditTransactionModal({ open, onOpenChange, transaction, 
                 </span>
                 <Input
                   id="amount"
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="0.00"
                   className="pl-7"
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                  onBlur={() => {
+                    const evaluated = evaluateNumericInput(formData.amount);
+                    if (evaluated !== null) {
+                      setFormData((prev) => ({ ...prev, amount: String(evaluated) }));
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return;
+                    if (needsEvaluation(formData.amount)) {
+                      const evaluated = evaluateNumericInput(formData.amount);
+                      if (evaluated !== null) {
+                        e.preventDefault();
+                        setFormData((prev) => ({ ...prev, amount: String(evaluated) }));
+                      }
+                    }
+                  }}
                   required
                 />
               </div>

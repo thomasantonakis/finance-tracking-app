@@ -19,7 +19,7 @@ import {
 import { base44 } from '@/api/base44Client';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
-import { sortAccountsByOrder, getCurrencySymbol, getMainCurrency, readFxRates } from '@/utils';
+import { sortAccountsByOrder, getCurrencySymbol, getMainCurrency, readFxRates, evaluateNumericInput, needsEvaluation } from '@/utils';
 import { ArrowRight } from 'lucide-react';
 
 export default function EditTransferModal({ open, onOpenChange, transfer, onSuccess }) {
@@ -96,7 +96,13 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
       toast.error('Please fill in all required fields');
       return;
     }
-    if (currencyMismatch && !formData.amount_to) {
+    const amountValue = evaluateNumericInput(formData.amount);
+    if (amountValue === null || !Number.isFinite(amountValue) || amountValue < 0) {
+      toast.error('Please enter a valid amount');
+      return;
+    }
+    const amountToValue = formData.amount_to ? evaluateNumericInput(formData.amount_to) : null;
+    if (currencyMismatch && (amountToValue === null || !Number.isFinite(amountToValue) || amountToValue < 0)) {
       toast.error('Please enter both amounts for mismatched currencies');
       return;
     }
@@ -109,8 +115,8 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
     setLoading(true);
     
     await base44.entities.Transfer.update(transfer.id, {
-      amount: parseFloat(formData.amount),
-      amount_to: currencyMismatch ? parseFloat(formData.amount_to) : undefined,
+      amount: amountValue,
+      amount_to: currencyMismatch ? amountToValue : undefined,
       from_account_id: formData.from_account_id,
       to_account_id: formData.to_account_id,
       subcategory: formData.subcategory || undefined,
@@ -240,15 +246,30 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
                 </span>
                 <Input
                   id="amount"
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="0.00"
                   className="pl-7"
                   value={formData.amount}
                   onChange={(e) => {
                     setAmountToEdited(false);
                     setFormData({ ...formData, amount: e.target.value });
+                  }}
+                  onBlur={() => {
+                    const evaluated = evaluateNumericInput(formData.amount);
+                    if (evaluated !== null) {
+                      setFormData((prev) => ({ ...prev, amount: String(evaluated) }));
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return;
+                    if (needsEvaluation(formData.amount)) {
+                      const evaluated = evaluateNumericInput(formData.amount);
+                      if (evaluated !== null) {
+                        e.preventDefault();
+                        setFormData((prev) => ({ ...prev, amount: String(evaluated) }));
+                      }
+                    }
                   }}
                   required
                 />
@@ -260,15 +281,30 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
                   </span>
                   <Input
                     id="amount_to"
-                    type="number"
-                    step="0.01"
-                    min="0"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0.00"
                     className="pl-7"
                     value={formData.amount_to}
                     onChange={(e) => {
                       setAmountToEdited(true);
                       setFormData({ ...formData, amount_to: e.target.value });
+                    }}
+                    onBlur={() => {
+                      const evaluated = evaluateNumericInput(formData.amount_to);
+                      if (evaluated !== null) {
+                        setFormData((prev) => ({ ...prev, amount_to: String(evaluated) }));
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter') return;
+                      if (needsEvaluation(formData.amount_to)) {
+                        const evaluated = evaluateNumericInput(formData.amount_to);
+                        if (evaluated !== null) {
+                          e.preventDefault();
+                          setFormData((prev) => ({ ...prev, amount_to: String(evaluated) }));
+                        }
+                      }
                     }}
                     required
                   />

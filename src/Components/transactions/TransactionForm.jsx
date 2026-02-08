@@ -14,7 +14,7 @@ import {
 import { base44 } from '@/api/base44Client';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
-import { sortAccountsByOrder, getCurrencySymbol } from '@/utils';
+import { sortAccountsByOrder, getCurrencySymbol, evaluateNumericInput, needsEvaluation } from '@/utils';
 import CategoryCombobox from './CategoryCombobox';
 
 const expenseCategories = [
@@ -171,6 +171,12 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
       toast.error('Please fill in all required fields');
       return;
     }
+
+    const amountValue = evaluateNumericInput(formData.amount);
+    if (amountValue === null || !Number.isFinite(amountValue) || amountValue < 0) {
+      toast.error('Please enter a valid amount');
+      return;
+    }
     
     if (accounts.length === 0) {
       toast.error('Please create an account first in Settings');
@@ -205,7 +211,7 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
     }
 
     await base44.entities[entity].create({
-      amount: parseFloat(formData.amount),
+      amount: amountValue,
       category: finalCategory,
       subcategory: rawSubcategory,
       account_id: formData.account_id,
@@ -262,13 +268,28 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
             </span>
             <Input
               id="amount"
-              type="number"
-              step="0.01"
-              min="0"
+              type="text"
+              inputMode="decimal"
               placeholder="0.00"
               className="pl-7 text-lg"
               value={formData.amount}
               onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+              onBlur={() => {
+                const evaluated = evaluateNumericInput(formData.amount);
+                if (evaluated !== null) {
+                  setFormData((prev) => ({ ...prev, amount: String(evaluated) }));
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                if (needsEvaluation(formData.amount)) {
+                  const evaluated = evaluateNumericInput(formData.amount);
+                  if (evaluated !== null) {
+                    e.preventDefault();
+                    setFormData((prev) => ({ ...prev, amount: String(evaluated) }));
+                  }
+                }
+              }}
               required
             />
           </div>

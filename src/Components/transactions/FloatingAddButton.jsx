@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Plus } from 'lucide-react';
 import UnifiedTransactionModal from './UnifiedTransactionModal';
 
-export default function FloatingAddButton({ onSuccess }) {
+export default function FloatingAddButton({ onSuccess, initialDate }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -18,6 +18,7 @@ export default function FloatingAddButton({ onSuccess }) {
         open={open}
         onOpenChange={setOpen}
         onSuccess={onSuccess}
+        initialDate={initialDate}
       />
     </>
   );

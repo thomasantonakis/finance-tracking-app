@@ -213,7 +213,10 @@ export default function Calendar() {
             onUpdate={handleSuccess}
           />
 
-          <FloatingAddButton onSuccess={handleSuccess} />
+          <FloatingAddButton
+            onSuccess={handleSuccess}
+            initialDate={format(selectedDate, 'yyyy-MM-dd')}
+          />
         </div>
       </div>
     </div>

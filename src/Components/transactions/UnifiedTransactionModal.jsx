@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import TransactionForm from './TransactionForm';
 import TransferForm from './TransferForm';
 
-export default function UnifiedTransactionModal({ open, onOpenChange, onSuccess, defaultTab = 'expense' }) {
+export default function UnifiedTransactionModal({ open, onOpenChange, onSuccess, initialDate, defaultTab = 'expense' }) {
   const [activeTab, setActiveTab] = useState(defaultTab);
 
   const handleSuccess = () => {
@@ -36,6 +36,7 @@ export default function UnifiedTransactionModal({ open, onOpenChange, onSuccess,
               type="expense"
               onSuccess={handleSuccess}
               onCancel={() => onOpenChange(false)}
+              initialDate={initialDate}
             />
           </TabsContent>
 
@@ -44,6 +45,7 @@ export default function UnifiedTransactionModal({ open, onOpenChange, onSuccess,
               type="income"
               onSuccess={handleSuccess}
               onCancel={() => onOpenChange(false)}
+              initialDate={initialDate}
             />
           </TabsContent>
 
@@ -51,6 +53,7 @@ export default function UnifiedTransactionModal({ open, onOpenChange, onSuccess,
             <TransferForm
               onSuccess={handleSuccess}
               onCancel={() => onOpenChange(false)}
+              initialDate={initialDate}
             />
           </TabsContent>
         </Tabs>

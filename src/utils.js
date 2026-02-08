@@ -163,6 +163,32 @@ export function setDuplicateDate(dateValue) {
   }
 }
 
+export function evaluateNumericInput(input) {
+  if (input === null || input === undefined) return null;
+  const raw = String(input).trim();
+  if (!raw) return null;
+  const sanitized = raw.replace(/,/g, "");
+  if (!/^[0-9+\-*/().\s]+$/.test(sanitized)) return null;
+  try {
+    // eslint-disable-next-line no-new-func
+    const result = Function(`"use strict"; return (${sanitized});`)();
+    if (!Number.isFinite(result)) return null;
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+export function needsEvaluation(input) {
+  if (input === null || input === undefined) return false;
+  const raw = String(input).trim();
+  if (!raw) return false;
+  // If it's a plain number, no evaluation needed.
+  if (/^[+-]?(\d+(\.\d+)?|\.\d+)$/.test(raw)) return false;
+  // If it contains operators or parentheses, we should evaluate.
+  return /[*/()+-]/.test(raw);
+}
+
 export function getNumberFormat() {
   const cached = getUserSettingsCache();
   return cached.number_format || "dot";
