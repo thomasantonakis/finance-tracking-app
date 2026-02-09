@@ -189,6 +189,18 @@ export function needsEvaluation(input) {
   return /[*/()+-]/.test(raw);
 }
 
+export function roundToTwoDecimals(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  return Math.round((num + Number.EPSILON) * 100) / 100;
+}
+
+export function toTwoDecimalString(value) {
+  const rounded = roundToTwoDecimals(value);
+  if (rounded === null) return "";
+  return rounded.toFixed(2);
+}
+
 export function getNumberFormat() {
   const cached = getUserSettingsCache();
   return cached.number_format || "dot";

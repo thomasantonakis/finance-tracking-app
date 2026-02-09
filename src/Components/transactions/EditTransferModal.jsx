@@ -19,7 +19,7 @@ import {
 import { base44 } from '@/api/base44Client';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
-import { sortAccountsByOrder, getCurrencySymbol, getMainCurrency, readFxRates, evaluateNumericInput, needsEvaluation } from '@/utils';
+import { sortAccountsByOrder, getCurrencySymbol, getMainCurrency, readFxRates, evaluateNumericInput, needsEvaluation, roundToTwoDecimals, toTwoDecimalString } from '@/utils';
 import { ArrowRight } from 'lucide-react';
 
 export default function EditTransferModal({ open, onOpenChange, transfer, onSuccess }) {
@@ -97,12 +97,14 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
       return;
     }
     const amountValue = evaluateNumericInput(formData.amount);
-    if (amountValue === null || !Number.isFinite(amountValue) || amountValue < 0) {
+    const roundedAmount = roundToTwoDecimals(amountValue);
+    if (roundedAmount === null || !Number.isFinite(roundedAmount) || roundedAmount < 0) {
       toast.error('Please enter a valid amount');
       return;
     }
     const amountToValue = formData.amount_to ? evaluateNumericInput(formData.amount_to) : null;
-    if (currencyMismatch && (amountToValue === null || !Number.isFinite(amountToValue) || amountToValue < 0)) {
+    const roundedAmountTo = amountToValue === null ? null : roundToTwoDecimals(amountToValue);
+    if (currencyMismatch && (roundedAmountTo === null || !Number.isFinite(roundedAmountTo) || roundedAmountTo < 0)) {
       toast.error('Please enter both amounts for mismatched currencies');
       return;
     }
@@ -115,8 +117,8 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
     setLoading(true);
     
     await base44.entities.Transfer.update(transfer.id, {
-      amount: amountValue,
-      amount_to: currencyMismatch ? amountToValue : undefined,
+      amount: roundedAmount,
+      amount_to: currencyMismatch ? roundedAmountTo : undefined,
       from_account_id: formData.from_account_id,
       to_account_id: formData.to_account_id,
       subcategory: formData.subcategory || undefined,
@@ -258,7 +260,7 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
                   onBlur={() => {
                     const evaluated = evaluateNumericInput(formData.amount);
                     if (evaluated !== null) {
-                      setFormData((prev) => ({ ...prev, amount: String(evaluated) }));
+                      setFormData((prev) => ({ ...prev, amount: toTwoDecimalString(evaluated) }));
                     }
                   }}
                   onKeyDown={(e) => {
@@ -267,7 +269,7 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
                       const evaluated = evaluateNumericInput(formData.amount);
                       if (evaluated !== null) {
                         e.preventDefault();
-                        setFormData((prev) => ({ ...prev, amount: String(evaluated) }));
+                        setFormData((prev) => ({ ...prev, amount: toTwoDecimalString(evaluated) }));
                       }
                     }
                   }}
@@ -293,7 +295,7 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
                     onBlur={() => {
                       const evaluated = evaluateNumericInput(formData.amount_to);
                       if (evaluated !== null) {
-                        setFormData((prev) => ({ ...prev, amount_to: String(evaluated) }));
+                        setFormData((prev) => ({ ...prev, amount_to: toTwoDecimalString(evaluated) }));
                       }
                     }}
                     onKeyDown={(e) => {
@@ -302,7 +304,7 @@ export default function EditTransferModal({ open, onOpenChange, transfer, onSucc
                         const evaluated = evaluateNumericInput(formData.amount_to);
                         if (evaluated !== null) {
                           e.preventDefault();
-                          setFormData((prev) => ({ ...prev, amount_to: String(evaluated) }));
+                          setFormData((prev) => ({ ...prev, amount_to: toTwoDecimalString(evaluated) }));
                         }
                       }
                     }}

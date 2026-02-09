@@ -165,12 +165,12 @@ export default function AccountTransactionsList({
       )}
       {sortedMonths.map(monthKey => (
         <div key={monthKey} className="bg-white rounded-2xl p-4 border border-slate-100">
-          <div className="sticky top-0 z-10 bg-white/90 backdrop-blur py-1">
-            <h3 className="text-sm font-semibold text-slate-900 mb-3">
+          <div className="sticky top-16 z-20 -mx-4 px-4 py-2 bg-slate-50/95 backdrop-blur border-b border-slate-200/70">
+            <h3 className="text-sm font-semibold text-slate-900">
               {format(parseISO(monthKey + '-01'), 'MMMM yyyy')}
             </h3>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2 pt-3">
             {groupedByMonth[monthKey]
               .sort((a, b) => {
                 const dateCompare = new Date(b.date) - new Date(a.date);

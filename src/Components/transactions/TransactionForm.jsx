@@ -14,7 +14,7 @@ import {
 import { base44 } from '@/api/base44Client';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
-import { sortAccountsByOrder, getCurrencySymbol, evaluateNumericInput, needsEvaluation } from '@/utils';
+import { sortAccountsByOrder, getCurrencySymbol, evaluateNumericInput, needsEvaluation, roundToTwoDecimals, toTwoDecimalString } from '@/utils';
 import CategoryCombobox from './CategoryCombobox';
 
 const expenseCategories = [
@@ -173,7 +173,8 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
     }
 
     const amountValue = evaluateNumericInput(formData.amount);
-    if (amountValue === null || !Number.isFinite(amountValue) || amountValue < 0) {
+    const roundedAmount = roundToTwoDecimals(amountValue);
+    if (roundedAmount === null || !Number.isFinite(roundedAmount) || roundedAmount < 0) {
       toast.error('Please enter a valid amount');
       return;
     }
@@ -211,7 +212,7 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
     }
 
     await base44.entities[entity].create({
-      amount: amountValue,
+      amount: roundedAmount,
       category: finalCategory,
       subcategory: rawSubcategory,
       account_id: formData.account_id,
@@ -277,7 +278,7 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
               onBlur={() => {
                 const evaluated = evaluateNumericInput(formData.amount);
                 if (evaluated !== null) {
-                  setFormData((prev) => ({ ...prev, amount: String(evaluated) }));
+                  setFormData((prev) => ({ ...prev, amount: toTwoDecimalString(evaluated) }));
                 }
               }}
               onKeyDown={(e) => {
@@ -286,7 +287,7 @@ export default function TransactionForm({ type, onSuccess, onCancel, initialData
                   const evaluated = evaluateNumericInput(formData.amount);
                   if (evaluated !== null) {
                     e.preventDefault();
-                    setFormData((prev) => ({ ...prev, amount: String(evaluated) }));
+                    setFormData((prev) => ({ ...prev, amount: toTwoDecimalString(evaluated) }));
                   }
                 }
               }}

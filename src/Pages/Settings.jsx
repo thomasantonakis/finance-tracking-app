@@ -598,6 +598,10 @@ export default function Settings() {
       const rows = [
         ['Type', 'Date', 'Amount', 'Account', 'Category', 'Subcategory', 'Notes', 'Cleared', 'Projected', 'Important', 'crossCurrencyAmount']
       ];
+  const toCsvAmount = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n.toFixed(2) : '';
+  };
 
   const isStartingBalance = (t) => {
     const category = (t.category || '').trim().toLowerCase();
@@ -610,7 +614,7 @@ export default function Settings() {
       rows.push([
         'expense',
         e.date,
-        e.amount,
+        toCsvAmount(e.amount),
         account?.name || '',
         e.category,
         e.subcategory || '',
@@ -628,7 +632,7 @@ export default function Settings() {
       rows.push([
         'income',
         i.date,
-        i.amount,
+        toCsvAmount(i.amount),
         account?.name || '',
         i.category,
         i.subcategory || '',
@@ -646,7 +650,7 @@ export default function Settings() {
       rows.push([
         'transfer',
         t.date,
-        t.amount,
+        toCsvAmount(t.amount),
         fromAccount?.name || '',
         toAccount?.name || '',
         '',
@@ -654,7 +658,7 @@ export default function Settings() {
         t.cleared ? 'yes' : 'no',
         t.projected ? 'yes' : 'no',
         'no',
-        t.amount_to ?? t.amount
+        toCsvAmount(t.amount_to ?? t.amount)
       ]);
     });
 
@@ -665,7 +669,7 @@ export default function Settings() {
       rows.push([
         type,
         '1970-01-01',
-        Math.abs(amount),
+        toCsvAmount(Math.abs(amount)),
         acc.name || '',
         'SYSTEM - Starting Balance',
         '',
