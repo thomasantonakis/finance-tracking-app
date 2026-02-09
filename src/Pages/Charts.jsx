@@ -130,7 +130,7 @@ export default function Charts() {
   const filterTransactions = (transactions) => {
     return transactions.filter(t => {
       const clearedMatch = showCleared || t.cleared !== false;
-      const projectedMatch = showProjected || t.projected !== false;
+      const projectedMatch = showProjected || t.projected !== true;
       const isTransfer = t.from_account_id || t.to_account_id;
       const accountMatch = selectedAccount === 'all'
         ? true
@@ -886,6 +886,7 @@ export default function Charts() {
                   />
                   <span className="text-sm text-slate-600">Projected</span>
                 </label>
+                <span className="text-xs text-slate-400">Checked = include</span>
               </div>
             </div>
           </div>
